@@ -1,0 +1,30 @@
+# Compilados de Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Archivos generados por Go
+*.log
+*.tmp
+
+# Módulos y dependencias
+/vendor/
+/bin/
+/dist/
+/tmp/
+
+# Configuración del IDE/Editor
+.vscode/
+.idea/
+*.swp
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Variables de entorno locales
+.env
