@@ -11,10 +11,10 @@ func buildPingHandler(api *gin.RouterGroup) {
 	api.GET("/health/ping", pingHandler)
 }
 
-// @Summary Devuelve pong
-// @Description Endpoint de prueba para verificar el servidor
-// @Tags Health
 // @Title Ping
+// @Summary Returns pong
+// @Description Endpoint to test the server
+// @Tags Health
 // @Produce json
 // @Success 200 {object} map[string]string
 // @Router /api/v1/health/ping [get]
