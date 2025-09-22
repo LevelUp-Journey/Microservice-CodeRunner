@@ -2,7 +2,7 @@ package app
 
 import (
 	variables "code-runner/env"
-	handlers "code-runner/internal/handlers"
+	"code-runner/internal/handlers"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +19,7 @@ func SetUpRouter() *gin.Engine {
 	api := router.Group("/api/" + variables.AppConfig.APIVersion)
 	{
 		handlers.HealthHandlerBuilder(api)
-		handlers.ChallengeExecutionHandlerBuilder(api)
+		handlers.SolutionsExecutionsHandlerBuilder(api)
 	}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
