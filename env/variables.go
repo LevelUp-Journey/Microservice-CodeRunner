@@ -23,7 +23,7 @@ func LoadConfig() {
 
 	AppConfig = &Config{
 		Port:       getEnv("PORT", "8084"),
-		APIVersion: getEnv("API_VERSION", "1"),
+		APIVersion: getEnv("API_VERSION", "v1"),
 	}
 }
 
