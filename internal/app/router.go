@@ -1,17 +1,16 @@
-package main
+package app
 
 import (
 	variables "code-runner/env"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files" // swagger embed files
+	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "code-runner/docs"
 )
 
-func main() {
+// Configuration related to server routes
+func SetUpRouter() *gin.Engine {
 	variables.LoadConfig()
 
 	router := gin.Default()
@@ -28,5 +27,5 @@ func main() {
 
 	fmt.Println("Swagger UI disponible en: http://localhost:" + variables.AppConfig.Port + "/swagger/index.html")
 
-	router.Run(":" + variables.AppConfig.Port)
+	return router
 }
