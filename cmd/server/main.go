@@ -1,6 +1,9 @@
 package main
 
-import "code-runner/internal/app"
+import (
+	_ "code-runner/docs"
+	"code-runner/internal/app"
+)
 
 // Entry point of the application
 func main() {

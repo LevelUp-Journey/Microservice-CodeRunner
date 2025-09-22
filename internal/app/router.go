@@ -15,7 +15,6 @@ func SetUpRouter() *gin.Engine {
 
 	router := gin.Default()
 
-	// Grupo con prefijo de API
 	api := router.Group("/api/" + variables.AppConfig.APIVersion)
 	{
 		api.GET("/ping", func(c *gin.Context) {
@@ -24,7 +23,6 @@ func SetUpRouter() *gin.Engine {
 	}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
 	fmt.Println("Swagger UI disponible en: http://localhost:" + variables.AppConfig.Port + "/swagger/index.html")
 
 	return router
