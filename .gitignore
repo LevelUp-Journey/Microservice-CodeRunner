@@ -7,6 +7,9 @@
 *.test
 *.out
 
+# Swagger Docs
+/docs/
+
 # Archivos generados por Go
 *.log
 *.tmp

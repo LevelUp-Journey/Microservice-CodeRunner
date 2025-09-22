@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	Port string
+	Port       string
+	APIVersion string
 }
 
 var AppConfig *Config
@@ -21,7 +22,8 @@ func LoadConfig() {
 	}
 
 	AppConfig = &Config{
-		Port: getEnv("PORT", "8084"),
+		Port:       getEnv("PORT", "8084"),
+		APIVersion: getEnv("API_VERSION", "1"),
 	}
 }
 
