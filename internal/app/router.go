@@ -19,6 +19,7 @@ func SetUpRouter() *gin.Engine {
 	api := router.Group("/api/" + variables.AppConfig.APIVersion)
 	{
 		handlers.HealthHandlerBuilder(api)
+		handlers.ChallengeExecutionHandlerBuilder(api)
 	}
 
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
