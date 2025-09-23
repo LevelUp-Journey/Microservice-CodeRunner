@@ -1,6 +1,6 @@
-// @title Microservice CodeRunner API
-// @version 1.0
-// @schemes http https
+// @Title Microservice CodeRunner API
+// @Version 1.0
+// @Schemes http https
 package main
 
 import (

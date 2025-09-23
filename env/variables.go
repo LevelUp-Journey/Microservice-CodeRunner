@@ -1,6 +1,8 @@
 package variables
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 
@@ -31,6 +33,9 @@ func LoadConfig() {
 		Host:       getEnv("APP_HOST", "localhost"),
 		AppName:    getEnv("APP_NAME", "Microservice CodeRunner API"),
 	}
+
+	// Pretty-print config as JSON
+	printConfig(AppConfig)
 }
 
 // Helper
@@ -39,4 +44,14 @@ func getEnv(key, defaultVal string) string {
 		return value
 	}
 	return defaultVal
+}
+
+func printConfig(c *Config) {
+	b, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		fmt.Println("❌ Error marshalling config:", err)
+		return
+	}
+	fmt.Println("✅ AppConfig Loaded:")
+	fmt.Println(string(b))
 }
