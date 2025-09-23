@@ -12,7 +12,8 @@ import (
 type Config struct {
 	Port       string
 	APIVersion string
-	BasePath   string
+	BasePath   string // Full URL for external references
+	APIPath    string // Just the path for routing
 	Host       string
 	AppName    string
 }

@@ -22,10 +22,10 @@ func SetUpRouter() *gin.Engine {
 	docs.SwaggerInfo.Description = "API para ejecutar código de soluciones de desafíos de programación"
 	docs.SwaggerInfo.Version = "1.0"
 	docs.SwaggerInfo.Host = variables.AppConfig.Host + ":" + variables.AppConfig.Port
-	docs.SwaggerInfo.BasePath = variables.AppConfig.BasePath
+	docs.SwaggerInfo.BasePath = variables.AppConfig.APIPath
 	docs.SwaggerInfo.Schemes = []string{"http", "https"}
 
-	api := router.Group(variables.AppConfig.BasePath)
+	api := router.Group(variables.AppConfig.APIPath)
 	{
 		handlers.HealthHandlerBuilder(api)
 		handlers.SolutionsExecutionsHandlerBuilder(api)
