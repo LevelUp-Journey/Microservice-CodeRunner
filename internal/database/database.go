@@ -14,24 +14,9 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-type Database struct {
-	DB *gorm.DB
-}
-
 var (
 	database *Database
 )
-
-// DatabaseConfig holds database configuration
-type DatabaseConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
-	TimeZone string
-}
 
 // GetDatabaseConfig reads database configuration from environment variables
 func GetDatabaseConfig() *DatabaseConfig {
