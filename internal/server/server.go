@@ -11,12 +11,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"code-runner/internal/database"
+	"code-runner/internal/database/models"
+	"code-runner/internal/database/repository"
 	"code-runner/internal/pipeline"
+	"code-runner/internal/services"
 	"code-runner/internal/steps"
 )
 
@@ -171,6 +176,7 @@ type codeExecutionServiceImpl struct {
 	logger           pipeline.Logger
 	challengesAPIURL string
 	executions       sync.Map // Store active executions
+	executionService *services.ExecutionService
 }
 
 // NewCodeExecutionServiceServer creates a new gRPC service implementation
@@ -178,6 +184,15 @@ func NewCodeExecutionServiceServer(logger pipeline.Logger, challengesAPIURL stri
 	return &codeExecutionServiceImpl{
 		logger:           logger,
 		challengesAPIURL: challengesAPIURL,
+	}
+}
+
+// NewCodeExecutionServiceServerWithDB creates a new gRPC service implementation with database support
+func NewCodeExecutionServiceServerWithDB(logger pipeline.Logger, challengesAPIURL string, executionService *services.ExecutionService) CodeExecutionServiceServer {
+	return &codeExecutionServiceImpl{
+		logger:           logger,
+		challengesAPIURL: challengesAPIURL,
+		executionService: executionService,
 	}
 }
 
@@ -194,10 +209,44 @@ func (s *codeExecutionServiceImpl) ExecuteCode(ctx context.Context, req *Executi
 		"language":     req.Language,
 	})
 
+	// Create database execution record if service is available
+	var dbExecution *models.Execution
+	var dbExecutionID uuid.UUID
+	var err error
+
+	if s.executionService != nil {
+		dbExecution, err = s.executionService.CreateExecution(
+			req.SolutionId,
+			req.ChallengeId,
+			req.StudentId,
+			req.Code,
+			req.Language,
+		)
+		if err != nil {
+			s.logger.Error(ctx, "Failed to create database execution record", err, map[string]interface{}{
+				"execution_id": executionID,
+			})
+			// Continue without database tracking
+		} else {
+			dbExecutionID = dbExecution.ID
+			// Start the execution in database
+			if err := s.executionService.StartExecution(dbExecutionID); err != nil {
+				s.logger.Error(ctx, "Failed to start database execution", err, nil)
+			}
+		}
+	}
+
+	// Create database event handler if available
+	var eventHandler pipeline.EventHandler
+	if s.executionService != nil {
+		eventHandler = pipeline.NewDatabaseEventHandler(s.executionService, s.logger)
+	}
+
 	// Create pipeline
 	pipelineConfig := &pipeline.PipelineConfig{
-		ExecutionID: executionID,
-		Logger:      s.logger,
+		ExecutionID:  executionID,
+		Logger:       s.logger,
+		EventHandler: eventHandler,
 	}
 
 	p := pipeline.NewPipeline(pipelineConfig)
@@ -207,20 +256,36 @@ func (s *codeExecutionServiceImpl) ExecuteCode(ctx context.Context, req *Executi
 		s.logger.Error(ctx, "Failed to setup pipeline", err, map[string]interface{}{
 			"execution_id": executionID,
 		})
+
+		// Mark database execution as failed if available
+		if s.executionService != nil && dbExecutionID != uuid.Nil {
+			s.executionService.FailExecution(dbExecutionID, "Failed to setup pipeline", "setup_error")
+		}
+
 		return nil, status.Errorf(codes.Internal, "Failed to setup execution pipeline: %v", err)
 	}
 
 	// Create execution data
 	execData := s.createExecutionData(req, executionID)
+	execData.DatabaseExecutionID = dbExecutionID // Store DB ID for tracking
 
 	// Store execution for status tracking
 	s.executions.Store(executionID, execData)
 
 	// Execute pipeline
+	startTime := time.Now()
 	if err := p.Execute(ctx, execData); err != nil {
 		s.logger.Error(ctx, "Pipeline execution failed", err, map[string]interface{}{
 			"execution_id": executionID,
 		})
+
+		// Mark database execution as failed if available
+		if s.executionService != nil && dbExecutionID != uuid.Nil {
+			s.executionService.FailExecution(dbExecutionID, fmt.Sprintf("Pipeline execution failed: %v", err), "pipeline_error")
+
+			// Add execution logs
+			s.executionService.AddLog(dbExecutionID, "error", fmt.Sprintf("Pipeline execution failed: %v", err), "pipeline")
+		}
 
 		return &ExecutionResponse{
 			ApprovedTestIds: []string{},
@@ -232,12 +297,41 @@ func (s *codeExecutionServiceImpl) ExecuteCode(ctx context.Context, req *Executi
 		}, nil
 	}
 
+	executionDuration := time.Since(startTime).Milliseconds()
+
 	s.logger.Info(ctx, "Pipeline execution completed", map[string]interface{}{
 		"execution_id":   executionID,
 		"success":        execData.Success,
 		"approved_tests": len(execData.ApprovedTestIDs),
 		"execution_time": execData.ExecutionTimeMS,
 	})
+
+	// Update database execution with results if available
+	if s.executionService != nil && dbExecutionID != uuid.Nil {
+		failedTestIDs := make([]string, 0)
+		// For now, we'll assume all non-approved tests are failed
+		// This could be enhanced with more detailed test tracking
+
+		memoryUsage := 0.0 // Default value, could be enhanced with actual memory tracking
+
+		err := s.executionService.CompleteExecution(
+			dbExecutionID,
+			execData.Success,
+			execData.Message,
+			execData.ApprovedTestIDs,
+			failedTestIDs,
+			executionDuration,
+			memoryUsage,
+		)
+		if err != nil {
+			s.logger.Error(ctx, "Failed to complete database execution", err, nil)
+		}
+
+		// Add completion log
+		s.executionService.AddLog(dbExecutionID, "info",
+			fmt.Sprintf("Execution completed successfully. Tests passed: %d", len(execData.ApprovedTestIDs)),
+			"system")
+	}
 
 	// Build response
 	response := &ExecutionResponse{
@@ -387,21 +481,22 @@ func (s *codeExecutionServiceImpl) createExecutionData(req *ExecutionRequest, ex
 	}
 
 	return &pipeline.ExecutionData{
-		SolutionID:      req.SolutionId,
-		ChallengeID:     req.ChallengeId,
-		StudentID:       req.StudentId,
-		Code:            req.Code,
-		Language:        req.Language,
-		Config:          config,
-		ExecutionID:     executionID,
-		Status:          pipeline.ExecutionStatusPending,
-		ApprovedTestIDs: make([]string, 0),
-		Success:         false,
-		Message:         "",
-		CompletedSteps:  make([]pipeline.StepInfo, 0),
-		Metadata:        make(map[string]string),
-		TempFiles:       make([]string, 0),
-		Logs:            make([]pipeline.LogEntry, 0),
+		SolutionID:          req.SolutionId,
+		ChallengeID:         req.ChallengeId,
+		StudentID:           req.StudentId,
+		Code:                req.Code,
+		Language:            req.Language,
+		Config:              config,
+		ExecutionID:         executionID,
+		DatabaseExecutionID: uuid.Nil, // Will be set after DB creation
+		Status:              pipeline.ExecutionStatusPending,
+		ApprovedTestIDs:     make([]string, 0),
+		Success:             false,
+		Message:             "",
+		CompletedSteps:      make([]pipeline.StepInfo, 0),
+		Metadata:            make(map[string]string),
+		TempFiles:           make([]string, 0),
+		Logs:                make([]pipeline.LogEntry, 0),
 	}
 }
 
@@ -525,9 +620,11 @@ func generateExecutionID() string {
 
 // Server represents the gRPC server
 type Server struct {
-	grpcServer *grpc.Server
-	listener   net.Listener
-	logger     pipeline.Logger
+	grpcServer       *grpc.Server
+	listener         net.Listener
+	logger           pipeline.Logger
+	database         *database.Database
+	executionService *services.ExecutionService
 }
 
 // NewServer creates a new gRPC server
@@ -560,6 +657,42 @@ func NewServer(port string, challengesAPIURL string) (*Server, error) {
 	}, nil
 }
 
+// NewServerWithDB creates a new gRPC server with database support
+func NewServerWithDB(port string, challengesAPIURL string, db *database.Database) (*Server, error) {
+	// Create logger
+	logger, err := pipeline.NewDefaultLogger()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
+	}
+
+	// Create listener
+	lis, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on port %s: %w", port, err)
+	}
+
+	// Create repository and service
+	executionRepo := repository.NewExecutionRepository(db.DB)
+	executionService := services.NewExecutionService(executionRepo)
+
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+
+	// Create service implementation with database support
+	serviceServer := NewCodeExecutionServiceServerWithDB(logger, challengesAPIURL, executionService)
+
+	// Register service (placeholder - would normally be generated)
+	RegisterCodeExecutionServiceServer(grpcServer, serviceServer)
+
+	return &Server{
+		grpcServer:       grpcServer,
+		listener:         lis,
+		logger:           logger,
+		database:         db,
+		executionService: executionService,
+	}, nil
+}
+
 // Start starts the gRPC server
 func (s *Server) Start() error {
 	s.logger.Info(context.Background(), "Starting gRPC server", map[string]interface{}{
@@ -587,6 +720,13 @@ func (s *Server) Start() error {
 // Stop stops the gRPC server
 func (s *Server) Stop() {
 	s.grpcServer.GracefulStop()
+
+	// Close database connection if exists
+	if s.database != nil {
+		if err := s.database.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}
 }
 
 // RegisterCodeExecutionServiceServer placeholder for generated registration function

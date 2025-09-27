@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // PipelineStep represents a single step in the execution pipeline
@@ -51,10 +53,11 @@ type ExecutionData struct {
 	Config *ExecutionConfig
 
 	// Execution state
-	ExecutionID string
-	Status      ExecutionStatus
-	StartTime   time.Time
-	EndTime     time.Time
+	ExecutionID         string
+	DatabaseExecutionID uuid.UUID
+	Status              ExecutionStatus
+	StartTime           time.Time
+	EndTime             time.Time
 
 	// Results
 	ApprovedTestIDs []string
