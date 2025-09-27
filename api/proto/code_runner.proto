@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package com.levelupjourney.coderunner;
+
+option go_package = "code-runner/api/gen/coderunner/v1;coderunnerv1";
+option java_multiple_files = true;
+option java_package = "com.levelupjourney.microservicechallenges.solutions.interfaces.grpc";
+option java_outer_classname = "CodeExecutionProto";
+
+import "google/protobuf/timestamp.proto";
+
+// Service for code execution - communicates with CodeRunner microservice (Go)
+service CodeExecutionService {
+    // Execute solution code and return approved test IDs
+    rpc ExecuteCode (ExecutionRequest) returns (ExecutionResponse);
+
+    // Get execution status for monitoring
+    rpc GetExecutionStatus (ExecutionStatusRequest) returns (ExecutionStatusResponse);
+
+    // Health check for service monitoring
+    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
+
+    // Stream execution logs in real-time
+    rpc StreamExecutionLogs (StreamLogsRequest) returns (stream LogEntry);
+}
+
+// Request for code execution
+message ExecutionRequest {
+    string solution_id = 1;
+    string challenge_id = 2;
+    string student_id = 3;
+    string code = 4;
+    string language = 5;
+    ExecutionConfig config = 6;
+}
+
+// Response with list of approved test IDs
+message ExecutionResponse {
+    repeated string approved_test_ids = 1;
+    bool success = 2;
+    string message = 3;
+    string execution_id = 4;
+    ExecutionMetadata metadata = 5;
+    repeated PipelineStep pipeline_steps = 6;
+}
+
+// Request for execution status
+message ExecutionStatusRequest {
+    string execution_id = 1;
+}
+
+// Response for execution status
+message ExecutionStatusResponse {
+    string execution_id = 1;
+    ExecutionStatus status = 2;
+    repeated string approved_test_ids = 3;
+    bool success = 4;
+    string message = 5;
+    ExecutionMetadata metadata = 6;
+    repeated PipelineStep pipeline_steps = 7;
+}
+
+// Health check request
+message HealthCheckRequest {}
+
+// Health check response
+message HealthCheckResponse {
+    HealthStatus status = 1;
+    string message = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
+// Stream logs request
+message StreamLogsRequest {
+    string execution_id = 1;
+}
+
+// Log entry for streaming
+message LogEntry {
+    google.protobuf.Timestamp timestamp = 1;
+    LogLevel level = 2;
+    string message = 3;
+    string step_name = 4;
+    map<string, string> metadata = 5;
+}
+
+// Execution configuration
+message ExecutionConfig {
+    int32 timeout_seconds = 1;
+    int32 memory_limit_mb = 2;
+    bool enable_network = 3;
+    map<string, string> environment_variables = 4;
+    bool debug_mode = 5;
+}
+
+// Execution metadata with detailed information
+message ExecutionMetadata {
+    google.protobuf.Timestamp started_at = 1;
+    google.protobuf.Timestamp completed_at = 2;
+    int64 execution_time_ms = 3;
+    int64 memory_used_mb = 4;
+    int32 exit_code = 5;
+    CompilationInfo compilation = 6;
+    repeated TestResult test_results = 7;
+}
+
+// Compilation information
+message CompilationInfo {
+    bool success = 1;
+    string error_message = 2;
+    repeated string warnings = 3;
+    int64 compilation_time_ms = 4;
+}
+
+// Individual test result
+message TestResult {
+    string test_id = 1;
+    bool passed = 2;
+    string expected_output = 3;
+    string actual_output = 4;
+    string error_message = 5;
+    int64 execution_time_ms = 6;
+}
+
+// Pipeline step information
+message PipelineStep {
+    string name = 1;
+    StepStatus status = 2;
+    google.protobuf.Timestamp started_at = 3;
+    google.protobuf.Timestamp completed_at = 4;
+    string message = 5;
+    string error = 6;
+    map<string, string> step_metadata = 7;
+    int32 step_order = 8;
+}
+
+// Execution status enumeration
+enum ExecutionStatus {
+    EXECUTION_STATUS_UNSPECIFIED = 0;
+    EXECUTION_STATUS_PENDING = 1;
+    EXECUTION_STATUS_RUNNING = 2;
+    EXECUTION_STATUS_COMPLETED = 3;
+    EXECUTION_STATUS_FAILED = 4;
+    EXECUTION_STATUS_TIMEOUT = 5;
+    EXECUTION_STATUS_CANCELLED = 6;
+}
+
+// Pipeline step status enumeration
+enum StepStatus {
+    STEP_STATUS_UNSPECIFIED = 0;
+    STEP_STATUS_PENDING = 1;
+    STEP_STATUS_RUNNING = 2;
+    STEP_STATUS_COMPLETED = 3;
+    STEP_STATUS_FAILED = 4;
+    STEP_STATUS_SKIPPED = 5;
+}
+
+// Health status enumeration
+enum HealthStatus {
+    HEALTH_STATUS_UNSPECIFIED = 0;
+    HEALTH_STATUS_SERVING = 1;
+    HEALTH_STATUS_NOT_SERVING = 2;
+    HEALTH_STATUS_SERVICE_UNKNOWN = 3;
+}
+
+// Log level enumeration
+enum LogLevel {
+    LOG_LEVEL_UNSPECIFIED = 0;
+    LOG_LEVEL_DEBUG = 1;
+    LOG_LEVEL_INFO = 2;
+    LOG_LEVEL_WARN = 3;
+    LOG_LEVEL_ERROR = 4;
+}
+
+// Programming language enumeration
+enum ProgrammingLanguage {
+    PROGRAMMING_LANGUAGE_UNSPECIFIED = 0;
+    PROGRAMMING_LANGUAGE_JAVASCRIPT = 1;
+    PROGRAMMING_LANGUAGE_PYTHON = 2;
+    PROGRAMMING_LANGUAGE_JAVA = 3;
+    PROGRAMMING_LANGUAGE_CPP = 4;
+    PROGRAMMING_LANGUAGE_CSHARP = 5;
+    PROGRAMMING_LANGUAGE_GO = 6;
+    PROGRAMMING_LANGUAGE_RUST = 7;
+    PROGRAMMING_LANGUAGE_TYPESCRIPT = 8;
+}

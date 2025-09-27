@@ -1,0 +1,596 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"code-runner/internal/pipeline"
+	"code-runner/internal/steps"
+)
+
+// Enum types (these would normally be generated from protobuf)
+type ExecutionStatus int32
+type StepStatus int32
+type HealthStatus int32
+type LogLevel int32
+
+const (
+	ExecutionStatus_EXECUTION_STATUS_UNSPECIFIED ExecutionStatus = 0
+	ExecutionStatus_EXECUTION_STATUS_PENDING     ExecutionStatus = 1
+	ExecutionStatus_EXECUTION_STATUS_RUNNING     ExecutionStatus = 2
+	ExecutionStatus_EXECUTION_STATUS_COMPLETED   ExecutionStatus = 3
+	ExecutionStatus_EXECUTION_STATUS_FAILED      ExecutionStatus = 4
+	ExecutionStatus_EXECUTION_STATUS_TIMEOUT     ExecutionStatus = 5
+	ExecutionStatus_EXECUTION_STATUS_CANCELLED   ExecutionStatus = 6
+
+	StepStatus_STEP_STATUS_UNSPECIFIED StepStatus = 0
+	StepStatus_STEP_STATUS_PENDING     StepStatus = 1
+	StepStatus_STEP_STATUS_RUNNING     StepStatus = 2
+	StepStatus_STEP_STATUS_COMPLETED   StepStatus = 3
+	StepStatus_STEP_STATUS_FAILED      StepStatus = 4
+	StepStatus_STEP_STATUS_SKIPPED     StepStatus = 5
+
+	HealthStatus_HEALTH_STATUS_UNSPECIFIED     HealthStatus = 0
+	HealthStatus_HEALTH_STATUS_SERVING         HealthStatus = 1
+	HealthStatus_HEALTH_STATUS_NOT_SERVING     HealthStatus = 2
+	HealthStatus_HEALTH_STATUS_SERVICE_UNKNOWN HealthStatus = 3
+
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 1
+	LogLevel_LOG_LEVEL_INFO        LogLevel = 2
+	LogLevel_LOG_LEVEL_WARN        LogLevel = 3
+	LogLevel_LOG_LEVEL_ERROR       LogLevel = 4
+)
+
+// Message types (these would normally be generated from protobuf)
+type ExecutionRequest struct {
+	SolutionId  string
+	ChallengeId string
+	StudentId   string
+	Code        string
+	Language    string
+	Config      *ExecutionConfig
+}
+
+type ExecutionConfig struct {
+	TimeoutSeconds       int32
+	MemoryLimitMb        int32
+	EnableNetwork        bool
+	EnvironmentVariables map[string]string
+	DebugMode            bool
+}
+
+type ExecutionResponse struct {
+	ApprovedTestIds []string
+	Success         bool
+	Message         string
+	ExecutionId     string
+	Metadata        *ExecutionMetadata
+	PipelineSteps   []*PipelineStep
+}
+
+type ExecutionStatusRequest struct {
+	ExecutionId string
+}
+
+type ExecutionStatusResponse struct {
+	ExecutionId     string
+	Status          ExecutionStatus
+	ApprovedTestIds []string
+	Success         bool
+	Message         string
+	Metadata        *ExecutionMetadata
+	PipelineSteps   []*PipelineStep
+}
+
+type HealthCheckRequest struct{}
+
+type HealthCheckResponse struct {
+	Status    HealthStatus
+	Message   string
+	Timestamp *timestamppb.Timestamp
+}
+
+type StreamLogsRequest struct {
+	ExecutionId string
+}
+
+type LogEntry struct {
+	Timestamp *timestamppb.Timestamp
+	Level     LogLevel
+	Message   string
+	StepName  string
+	Metadata  map[string]string
+}
+
+type ExecutionMetadata struct {
+	StartedAt       *timestamppb.Timestamp
+	CompletedAt     *timestamppb.Timestamp
+	ExecutionTimeMs int64
+	MemoryUsedMb    int64
+	ExitCode        int32
+	Compilation     *CompilationInfo
+	TestResults     []*TestResult
+}
+
+type CompilationInfo struct {
+	Success           bool
+	ErrorMessage      string
+	Warnings          []string
+	CompilationTimeMs int64
+}
+
+type TestResult struct {
+	TestId          string
+	Passed          bool
+	ExpectedOutput  string
+	ActualOutput    string
+	ErrorMessage    string
+	ExecutionTimeMs int64
+}
+
+type PipelineStep struct {
+	Name         string
+	Status       StepStatus
+	StartedAt    *timestamppb.Timestamp
+	CompletedAt  *timestamppb.Timestamp
+	Message      string
+	Error        string
+	StepMetadata map[string]string
+	StepOrder    int32
+}
+
+// Stream interface
+type CodeExecutionService_StreamExecutionLogsServer interface {
+	Send(*LogEntry) error
+	Context() context.Context
+}
+
+// Service interface
+type CodeExecutionServiceServer interface {
+	ExecuteCode(context.Context, *ExecutionRequest) (*ExecutionResponse, error)
+	GetExecutionStatus(context.Context, *ExecutionStatusRequest) (*ExecutionStatusResponse, error)
+	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
+	StreamExecutionLogs(*StreamLogsRequest, CodeExecutionService_StreamExecutionLogsServer) error
+}
+
+// Actual service implementation
+type codeExecutionServiceImpl struct {
+	logger           pipeline.Logger
+	challengesAPIURL string
+	executions       sync.Map // Store active executions
+}
+
+// NewCodeExecutionServiceServer creates a new gRPC service implementation
+func NewCodeExecutionServiceServer(logger pipeline.Logger, challengesAPIURL string) CodeExecutionServiceServer {
+	return &codeExecutionServiceImpl{
+		logger:           logger,
+		challengesAPIURL: challengesAPIURL,
+	}
+}
+
+// ExecuteCode executes solution code and returns approved test IDs
+func (s *codeExecutionServiceImpl) ExecuteCode(ctx context.Context, req *ExecutionRequest) (*ExecutionResponse, error) {
+	// Generate execution ID
+	executionID := generateExecutionID()
+
+	s.logger.Info(ctx, "Received code execution request", map[string]interface{}{
+		"execution_id": executionID,
+		"solution_id":  req.SolutionId,
+		"challenge_id": req.ChallengeId,
+		"student_id":   req.StudentId,
+		"language":     req.Language,
+	})
+
+	// Create pipeline
+	pipelineConfig := &pipeline.PipelineConfig{
+		ExecutionID: executionID,
+		Logger:      s.logger,
+	}
+
+	p := pipeline.NewPipeline(pipelineConfig)
+
+	// Add pipeline steps
+	if err := s.setupPipeline(p); err != nil {
+		s.logger.Error(ctx, "Failed to setup pipeline", err, map[string]interface{}{
+			"execution_id": executionID,
+		})
+		return nil, status.Errorf(codes.Internal, "Failed to setup execution pipeline: %v", err)
+	}
+
+	// Create execution data
+	execData := s.createExecutionData(req, executionID)
+
+	// Store execution for status tracking
+	s.executions.Store(executionID, execData)
+
+	// Execute pipeline
+	if err := p.Execute(ctx, execData); err != nil {
+		s.logger.Error(ctx, "Pipeline execution failed", err, map[string]interface{}{
+			"execution_id": executionID,
+		})
+
+		return &ExecutionResponse{
+			ApprovedTestIds: []string{},
+			Success:         false,
+			Message:         fmt.Sprintf("Execution failed: %v", err),
+			ExecutionId:     executionID,
+			Metadata:        s.buildExecutionMetadata(execData),
+			PipelineSteps:   s.buildPipelineSteps(execData),
+		}, nil
+	}
+
+	s.logger.Info(ctx, "Pipeline execution completed", map[string]interface{}{
+		"execution_id":   executionID,
+		"success":        execData.Success,
+		"approved_tests": len(execData.ApprovedTestIDs),
+		"execution_time": execData.ExecutionTimeMS,
+	})
+
+	// Build response
+	response := &ExecutionResponse{
+		ApprovedTestIds: execData.ApprovedTestIDs,
+		Success:         execData.Success,
+		Message:         execData.Message,
+		ExecutionId:     executionID,
+		Metadata:        s.buildExecutionMetadata(execData),
+		PipelineSteps:   s.buildPipelineSteps(execData),
+	}
+
+	return response, nil
+}
+
+// GetExecutionStatus gets the status of an execution
+func (s *codeExecutionServiceImpl) GetExecutionStatus(ctx context.Context, req *ExecutionStatusRequest) (*ExecutionStatusResponse, error) {
+	s.logger.Info(ctx, "Received execution status request", map[string]interface{}{
+		"execution_id": req.ExecutionId,
+	})
+
+	// Get execution data
+	execDataInterface, exists := s.executions.Load(req.ExecutionId)
+	if !exists {
+		return nil, status.Errorf(codes.NotFound, "Execution not found: %s", req.ExecutionId)
+	}
+
+	execData, ok := execDataInterface.(*pipeline.ExecutionData)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "Invalid execution data")
+	}
+
+	// Convert pipeline status to proto status
+	protoStatus := s.convertExecutionStatus(execData.Status)
+
+	response := &ExecutionStatusResponse{
+		ExecutionId:     req.ExecutionId,
+		Status:          protoStatus,
+		ApprovedTestIds: execData.ApprovedTestIDs,
+		Success:         execData.Success,
+		Message:         execData.Message,
+		Metadata:        s.buildExecutionMetadata(execData),
+		PipelineSteps:   s.buildPipelineSteps(execData),
+	}
+
+	return response, nil
+}
+
+// HealthCheck returns the health status of the service
+func (s *codeExecutionServiceImpl) HealthCheck(ctx context.Context, req *HealthCheckRequest) (*HealthCheckResponse, error) {
+	return &HealthCheckResponse{
+		Status:    HealthStatus_HEALTH_STATUS_SERVING,
+		Message:   "Code Runner service is healthy",
+		Timestamp: timestamppb.New(time.Now()),
+	}, nil
+}
+
+// StreamExecutionLogs streams execution logs in real-time
+func (s *codeExecutionServiceImpl) StreamExecutionLogs(req *StreamLogsRequest, stream CodeExecutionService_StreamExecutionLogsServer) error {
+	ctx := stream.Context()
+
+	s.logger.Info(ctx, "Starting log stream", map[string]interface{}{
+		"execution_id": req.ExecutionId,
+	})
+
+	// Get execution data
+	execDataInterface, exists := s.executions.Load(req.ExecutionId)
+	if !exists {
+		return status.Errorf(codes.NotFound, "Execution not found: %s", req.ExecutionId)
+	}
+
+	execData, ok := execDataInterface.(*pipeline.ExecutionData)
+	if !ok {
+		return status.Errorf(codes.Internal, "Invalid execution data")
+	}
+
+	// Stream existing logs
+	for _, logEntry := range execData.Logs {
+		protoLogEntry := &LogEntry{
+			Timestamp: timestamppb.New(logEntry.Timestamp),
+			Level:     s.convertLogLevel(logEntry.Level),
+			Message:   logEntry.Message,
+			StepName:  logEntry.StepName,
+			Metadata:  logEntry.Metadata,
+		}
+
+		if err := stream.Send(protoLogEntry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// setupPipeline configures the execution pipeline with all necessary steps
+func (s *codeExecutionServiceImpl) setupPipeline(p pipeline.Pipeline) error {
+	// Step 1: Validation
+	validationStep := steps.NewValidationStep()
+	if err := p.AddStep(validationStep); err != nil {
+		return fmt.Errorf("failed to add validation step: %w", err)
+	}
+
+	// Step 2: Compilation
+	compilationStep := steps.NewCompilationStep()
+	if err := p.AddStep(compilationStep); err != nil {
+		return fmt.Errorf("failed to add compilation step: %w", err)
+	}
+
+	// Step 3: Test Fetching
+	testFetchingStep := steps.NewTestFetchingStep(s.challengesAPIURL)
+	if err := p.AddStep(testFetchingStep); err != nil {
+		return fmt.Errorf("failed to add test fetching step: %w", err)
+	}
+
+	// Step 4: Execution
+	executionStep := steps.NewExecutionStep()
+	if err := p.AddStep(executionStep); err != nil {
+		return fmt.Errorf("failed to add execution step: %w", err)
+	}
+
+	// Step 5: Cleanup
+	cleanupStep := steps.NewCleanupStep()
+	if err := p.AddStep(cleanupStep); err != nil {
+		return fmt.Errorf("failed to add cleanup step: %w", err)
+	}
+
+	return nil
+}
+
+// createExecutionData creates execution data from the request
+func (s *codeExecutionServiceImpl) createExecutionData(req *ExecutionRequest, executionID string) *pipeline.ExecutionData {
+	// Create execution config
+	config := &pipeline.ExecutionConfig{
+		TimeoutSeconds:       30,
+		MemoryLimitMB:        512,
+		EnableNetwork:        false,
+		EnvironmentVariables: make(map[string]string),
+		DebugMode:            false,
+	}
+
+	// Override with request config if provided
+	if req.Config != nil {
+		config.TimeoutSeconds = req.Config.TimeoutSeconds
+		config.MemoryLimitMB = req.Config.MemoryLimitMb
+		config.EnableNetwork = req.Config.EnableNetwork
+		config.EnvironmentVariables = req.Config.EnvironmentVariables
+		config.DebugMode = req.Config.DebugMode
+	}
+
+	return &pipeline.ExecutionData{
+		SolutionID:      req.SolutionId,
+		ChallengeID:     req.ChallengeId,
+		StudentID:       req.StudentId,
+		Code:            req.Code,
+		Language:        req.Language,
+		Config:          config,
+		ExecutionID:     executionID,
+		Status:          pipeline.ExecutionStatusPending,
+		ApprovedTestIDs: make([]string, 0),
+		Success:         false,
+		Message:         "",
+		CompletedSteps:  make([]pipeline.StepInfo, 0),
+		Metadata:        make(map[string]string),
+		TempFiles:       make([]string, 0),
+		Logs:            make([]pipeline.LogEntry, 0),
+	}
+}
+
+// buildExecutionMetadata builds execution metadata for the response
+func (s *codeExecutionServiceImpl) buildExecutionMetadata(data *pipeline.ExecutionData) *ExecutionMetadata {
+	metadata := &ExecutionMetadata{
+		StartedAt:       timestamppb.New(data.StartTime),
+		CompletedAt:     timestamppb.New(data.EndTime),
+		ExecutionTimeMs: data.ExecutionTimeMS,
+		MemoryUsedMb:    data.MemoryUsedMB,
+		ExitCode:        int32(data.ExitCode),
+	}
+
+	// Add compilation info if available
+	if data.CompilationResult != nil {
+		metadata.Compilation = &CompilationInfo{
+			Success:           data.CompilationResult.Success,
+			ErrorMessage:      data.CompilationResult.ErrorMessage,
+			Warnings:          data.CompilationResult.Warnings,
+			CompilationTimeMs: data.CompilationResult.CompilationTimeMS,
+		}
+	}
+
+	// Add test results if available
+	if data.TestResults != nil {
+		testResults := make([]*TestResult, len(data.TestResults))
+		for i, result := range data.TestResults {
+			testResults[i] = &TestResult{
+				TestId:          result.TestID,
+				Passed:          result.Passed,
+				ExpectedOutput:  result.ExpectedOutput,
+				ActualOutput:    result.ActualOutput,
+				ErrorMessage:    result.ErrorMessage,
+				ExecutionTimeMs: result.ExecutionTimeMS,
+			}
+		}
+		metadata.TestResults = testResults
+	}
+
+	return metadata
+}
+
+// buildPipelineSteps builds pipeline steps for the response
+func (s *codeExecutionServiceImpl) buildPipelineSteps(data *pipeline.ExecutionData) []*PipelineStep {
+	steps := make([]*PipelineStep, len(data.CompletedSteps))
+
+	for i, stepInfo := range data.CompletedSteps {
+		steps[i] = &PipelineStep{
+			Name:         stepInfo.Name,
+			Status:       s.convertStepStatus(stepInfo.Status),
+			StartedAt:    timestamppb.New(stepInfo.StartedAt),
+			CompletedAt:  timestamppb.New(stepInfo.CompletedAt),
+			Message:      stepInfo.Message,
+			Error:        stepInfo.Error,
+			StepMetadata: stepInfo.Metadata,
+			StepOrder:    int32(stepInfo.Order),
+		}
+	}
+
+	return steps
+}
+
+// convertExecutionStatus converts pipeline execution status to proto status
+func (s *codeExecutionServiceImpl) convertExecutionStatus(status pipeline.ExecutionStatus) ExecutionStatus {
+	switch status {
+	case pipeline.ExecutionStatusPending:
+		return ExecutionStatus_EXECUTION_STATUS_PENDING
+	case pipeline.ExecutionStatusRunning:
+		return ExecutionStatus_EXECUTION_STATUS_RUNNING
+	case pipeline.ExecutionStatusCompleted:
+		return ExecutionStatus_EXECUTION_STATUS_COMPLETED
+	case pipeline.ExecutionStatusFailed:
+		return ExecutionStatus_EXECUTION_STATUS_FAILED
+	case pipeline.ExecutionStatusTimeout:
+		return ExecutionStatus_EXECUTION_STATUS_TIMEOUT
+	case pipeline.ExecutionStatusCancelled:
+		return ExecutionStatus_EXECUTION_STATUS_CANCELLED
+	default:
+		return ExecutionStatus_EXECUTION_STATUS_UNSPECIFIED
+	}
+}
+
+// convertStepStatus converts pipeline step status to proto status
+func (s *codeExecutionServiceImpl) convertStepStatus(status pipeline.StepStatus) StepStatus {
+	switch status {
+	case pipeline.StepStatusPending:
+		return StepStatus_STEP_STATUS_PENDING
+	case pipeline.StepStatusRunning:
+		return StepStatus_STEP_STATUS_RUNNING
+	case pipeline.StepStatusCompleted:
+		return StepStatus_STEP_STATUS_COMPLETED
+	case pipeline.StepStatusFailed:
+		return StepStatus_STEP_STATUS_FAILED
+	case pipeline.StepStatusSkipped:
+		return StepStatus_STEP_STATUS_SKIPPED
+	default:
+		return StepStatus_STEP_STATUS_UNSPECIFIED
+	}
+}
+
+// convertLogLevel converts pipeline log level to proto log level
+func (s *codeExecutionServiceImpl) convertLogLevel(level pipeline.LogLevel) LogLevel {
+	switch level {
+	case pipeline.LogLevelDebug:
+		return LogLevel_LOG_LEVEL_DEBUG
+	case pipeline.LogLevelInfo:
+		return LogLevel_LOG_LEVEL_INFO
+	case pipeline.LogLevelWarn:
+		return LogLevel_LOG_LEVEL_WARN
+	case pipeline.LogLevelError:
+		return LogLevel_LOG_LEVEL_ERROR
+	default:
+		return LogLevel_LOG_LEVEL_UNSPECIFIED
+	}
+}
+
+// generateExecutionID generates a unique execution ID
+func generateExecutionID() string {
+	return fmt.Sprintf("exec_%d", time.Now().UnixNano())
+}
+
+// Server represents the gRPC server
+type Server struct {
+	grpcServer *grpc.Server
+	listener   net.Listener
+	logger     pipeline.Logger
+}
+
+// NewServer creates a new gRPC server
+func NewServer(port string, challengesAPIURL string) (*Server, error) {
+	// Create logger
+	logger, err := pipeline.NewDefaultLogger()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create logger: %w", err)
+	}
+
+	// Create listener
+	lis, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on port %s: %w", port, err)
+	}
+
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+
+	// Create service implementation
+	serviceServer := NewCodeExecutionServiceServer(logger, challengesAPIURL)
+
+	// Register service (placeholder - would normally be generated)
+	RegisterCodeExecutionServiceServer(grpcServer, serviceServer)
+
+	return &Server{
+		grpcServer: grpcServer,
+		listener:   lis,
+		logger:     logger,
+	}, nil
+}
+
+// Start starts the gRPC server
+func (s *Server) Start() error {
+	s.logger.Info(context.Background(), "Starting gRPC server", map[string]interface{}{
+		"address": s.listener.Addr().String(),
+	})
+
+	// Start server in goroutine
+	go func() {
+		if err := s.grpcServer.Serve(s.listener); err != nil {
+			log.Printf("Failed to serve gRPC server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+
+	s.logger.Info(context.Background(), "Shutting down gRPC server", nil)
+	s.grpcServer.GracefulStop()
+
+	return nil
+}
+
+// Stop stops the gRPC server
+func (s *Server) Stop() {
+	s.grpcServer.GracefulStop()
+}
+
+// RegisterCodeExecutionServiceServer placeholder for generated registration function
+func RegisterCodeExecutionServiceServer(s *grpc.Server, srv CodeExecutionServiceServer) {
+	// This would normally be generated by protoc
+	log.Println("Service registered successfully")
+}
