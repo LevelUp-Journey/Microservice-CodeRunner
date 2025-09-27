@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	solution_execution "code-runner/internal/pipelines/solution-execution"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,17 +23,5 @@ func buildAddSolutionsExecutionsHandlerBySolutionId(api *gin.RouterGroup) {
 // @Success 200 {object} solution_execution.ExecuteSolutionResource
 // @Router /api/v1/solutions/{solutionId}/executions [post]
 func AddSolutionsExecutionsHandler(c *gin.Context) {
-	solutionId := c.Param("solutionId")
 
-	// Crear una respuesta usando el tipo ExecuteSolutionResource
-	response := solution_execution.ExecuteSolutionResource{
-		ExecutionID: "exec-" + solutionId,
-		SolutionID:  solutionId,
-		Status:      "success",
-		Message:     "Solution executed successfully",
-		Output:      "Hello World!",
-		Error:       "",
-	}
-
-	c.JSON(200, response)
 }
