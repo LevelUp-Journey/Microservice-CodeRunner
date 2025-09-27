@@ -14,6 +14,14 @@ type Config struct {
 	GRPCPort   string
 	APIVersion string
 	AppName    string
+	// Database configuration
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
+	DBSSLMode  string
+	DBTimeZone string
 }
 
 var AppConfig *Config
@@ -30,6 +38,14 @@ func LoadConfig() {
 		GRPCPort:   getEnv("GRPC_PORT", "9084"),
 		APIVersion: getEnv("API_VERSION", "v1"),
 		AppName:    getEnv("APP_NAME", "Microservice CodeRunner gRPC API"),
+		// Database configuration
+		DBHost:     getEnv("DB_HOST", "localhost"),
+		DBPort:     getEnv("DB_PORT", "5432"),
+		DBUser:     getEnv("DB_USER", "postgres"),
+		DBPassword: getEnv("DB_PASSWORD", "postgres"),
+		DBName:     getEnv("DB_NAME", "coderunner"),
+		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+		DBTimeZone: getEnv("DB_TIMEZONE", "UTC"),
 	}
 
 	// Print config
@@ -62,4 +78,21 @@ func GetGRPCPort() string {
 		return "9084"
 	}
 	return AppConfig.GRPCPort
+}
+
+// GetDatabaseDSN returns the database connection string
+func GetDatabaseDSN() string {
+	if AppConfig == nil {
+		return "host=localhost user=postgres password=postgres dbname=coderunner port=5432 sslmode=disable TimeZone=UTC"
+	}
+	return fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
+		AppConfig.DBHost,
+		AppConfig.DBUser,
+		AppConfig.DBPassword,
+		AppConfig.DBName,
+		AppConfig.DBPort,
+		AppConfig.DBSSLMode,
+		AppConfig.DBTimeZone,
+	)
 }
