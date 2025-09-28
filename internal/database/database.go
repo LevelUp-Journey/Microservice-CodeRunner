@@ -25,9 +25,9 @@ func GetDatabaseConfig() *DatabaseConfig {
 	return &DatabaseConfig{
 		Host:     getEnvOrDefault("DB_HOST", "localhost"),
 		Port:     port,
-		User:     getEnvOrDefault("DB_USER", "postgres"),
-		Password: getEnvOrDefault("DB_PASSWORD", "postgres"),
-		DBName:   getEnvOrDefault("DB_NAME", "coderunner"),
+		User:     getEnvOrDefault("DB_USER", "admin"),
+		Password: getEnvOrDefault("DB_PASSWORD", "admin"),
+		DBName:   getEnvOrDefault("DB_NAME", "coderunner_microservice"),
 		SSLMode:  getEnvOrDefault("DB_SSLMODE", "disable"),
 		TimeZone: getEnvOrDefault("DB_TIMEZONE", "UTC"),
 	}
