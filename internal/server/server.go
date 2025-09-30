@@ -301,10 +301,19 @@ func (s *codeExecutionServiceImpl) setupPipeline(p pipeline.Pipeline) error {
 		return fmt.Errorf("failed to add test fetching step: %w", err)
 	}
 
-	// Step 4: Execution
-	executionStep := steps.NewExecutionStep()
+	// Step 4: Docker Execution (with database support if available)
+	var executionStep pipeline.PipelineStep
+	if s.executionService != nil {
+		// Get the database connection from execution service
+		// We need to access the underlying DB - this is a bit of a hack but works
+		db := s.executionService.GetDB()
+		generatedTestCodeRepo := repository.NewGeneratedTestCodeRepository(db)
+		executionStep = steps.NewDockerExecutionStepWithRepo(s.logger, generatedTestCodeRepo)
+	} else {
+		executionStep = steps.NewDockerExecutionStep(s.logger)
+	}
 	if err := p.AddStep(executionStep); err != nil {
-		return fmt.Errorf("failed to add execution step: %w", err)
+		return fmt.Errorf("failed to add docker execution step: %w", err)
 	}
 
 	// Step 5: Cleanup
@@ -508,7 +517,7 @@ func NewServer(port string, challengesAPIURL string) (*Server, error) {
 
 	// Register service using generated registration function
 	pb.RegisterCodeExecutionServiceServer(grpcServer, serviceServer)
-	
+
 	// Log successful service registration
 	logger.Info(context.Background(), "gRPC service registered successfully", map[string]interface{}{
 		"service": "com.levelupjourney.coderunner.CodeExecutionService",
@@ -538,7 +547,7 @@ func NewServerWithDB(port string, challengesAPIURL string, db *database.Database
 
 	// Create repository and service
 	executionRepo := repository.NewExecutionRepository(db.DB)
-	executionService := services.NewExecutionService(executionRepo)
+	executionService := services.NewExecutionServiceWithDB(executionRepo, db.DB)
 
 	// Create gRPC server
 	grpcServer := grpc.NewServer()
@@ -548,11 +557,11 @@ func NewServerWithDB(port string, challengesAPIURL string, db *database.Database
 
 	// Register service using generated registration function
 	pb.RegisterCodeExecutionServiceServer(grpcServer, serviceServer)
-	
+
 	// Log successful service registration with database
 	logger.Info(context.Background(), "gRPC service with database registered successfully", map[string]interface{}{
-		"service": "com.levelupjourney.coderunner.CodeExecutionService",
-		"methods": []string{"ExecuteCode", "GetExecutionStatus", "HealthCheck", "StreamExecutionLogs"},
+		"service":  "com.levelupjourney.coderunner.CodeExecutionService",
+		"methods":  []string{"ExecuteCode", "GetExecutionStatus", "HealthCheck", "StreamExecutionLogs"},
 		"database": "enabled",
 	})
 
@@ -568,9 +577,9 @@ func NewServerWithDB(port string, challengesAPIURL string, db *database.Database
 // Start starts the gRPC server
 func (s *Server) Start() error {
 	address := s.listener.Addr().String()
-	
+
 	s.logger.Info(context.Background(), "Starting gRPC server", map[string]interface{}{
-		"address": address,
+		"address":  address,
 		"protocol": "gRPC (HTTP/2)",
 	})
 

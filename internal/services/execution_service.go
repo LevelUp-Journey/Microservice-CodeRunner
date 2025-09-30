@@ -11,10 +11,12 @@ import (
 	"code-runner/internal/database/repository"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type ExecutionService struct {
 	repo *repository.ExecutionRepository
+	db   *gorm.DB // Add direct DB access for other repositories
 }
 
 // NewExecutionService creates a new execution service
@@ -22,6 +24,24 @@ func NewExecutionService(repo *repository.ExecutionRepository) *ExecutionService
 	return &ExecutionService{
 		repo: repo,
 	}
+}
+
+// NewExecutionServiceWithDB creates a new execution service with direct DB access
+func NewExecutionServiceWithDB(repo *repository.ExecutionRepository, db *gorm.DB) *ExecutionService {
+	return &ExecutionService{
+		repo: repo,
+		db:   db,
+	}
+}
+
+// GetDB returns the underlying database connection
+func (s *ExecutionService) GetDB() *gorm.DB {
+	if s.db != nil {
+		return s.db
+	}
+	// Fallback: try to get DB from repository if available
+	// This is a bit hacky but provides backward compatibility
+	return nil
 }
 
 // CreateExecution creates a new execution record
@@ -68,8 +88,8 @@ func (s *ExecutionService) StartExecution(executionID uuid.UUID) error {
 		StepOrder:   0,
 		Status:      models.StatusRunning,
 		StartedAt:   timePtr(time.Now()),
-		Metadata:    s.ensureValidJSON(map[string]interface{}{
-			"step_type": "initialization",
+		Metadata: s.ensureValidJSON(map[string]interface{}{
+			"step_type":  "initialization",
 			"started_at": time.Now().Format(time.RFC3339),
 		}),
 	}
@@ -139,7 +159,7 @@ func (s *ExecutionService) CompleteExecutionStep(stepID uuid.UUID, metadata stri
 	now := time.Now()
 	step.Status = models.StatusCompleted
 	step.CompletedAt = &now
-	
+
 	// Serialize metadata to valid JSON before persisting
 	step.Metadata = s.ensureValidJSON(metadata)
 
@@ -193,20 +213,20 @@ func (s *ExecutionService) CompleteExecution(executionID uuid.UUID, success bool
 	execution.Status = models.StatusCompleted
 	execution.Success = success
 	execution.Message = message
-	
+
 	// Ensure arrays are not nil to avoid JSON serialization issues
 	if approvedTestIDs == nil {
 		execution.ApprovedTestIDs = []string{}
 	} else {
 		execution.ApprovedTestIDs = approvedTestIDs
 	}
-	
+
 	if failedTestIDs == nil {
 		execution.FailedTestIDs = []string{}
 	} else {
 		execution.FailedTestIDs = failedTestIDs
 	}
-	
+
 	execution.TotalTests = len(execution.ApprovedTestIDs) + len(execution.FailedTestIDs)
 	execution.PassedTests = len(execution.ApprovedTestIDs)
 	execution.ExecutionTimeMs = &executionTimeMs
@@ -375,7 +395,7 @@ func (s *ExecutionService) ensureValidJSON(payload interface{}) string {
 		if str == "" {
 			return "{}"
 		}
-		
+
 		// Check if it's valid JSON
 		var js interface{}
 		if err := json.Unmarshal([]byte(str), &js); err != nil {
@@ -398,9 +418,9 @@ func (s *ExecutionService) ensureValidJSON(payload interface{}) string {
 		log.Printf("⚠️ Failed to marshal payload to JSON: %v", err)
 		// Create a safe fallback with error info
 		fallbackPayload := map[string]interface{}{
-			"error":           "marshal_failed",
-			"original_type":   fmt.Sprintf("%T", payload),
-			"error_message":   err.Error(),
+			"error":         "marshal_failed",
+			"original_type": fmt.Sprintf("%T", payload),
+			"error_message": err.Error(),
 		}
 		if jsonBytes, err := json.Marshal(fallbackPayload); err == nil {
 			return string(jsonBytes)

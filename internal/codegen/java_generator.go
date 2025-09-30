@@ -74,9 +74,9 @@ func (jg *JavaGenerator) GenerateTestCode(solution string, testCases []types.Tes
 func (jg *JavaGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, className string, testNum int) string {
 	var test strings.Builder
 
-	methodName := fmt.Sprintf("test%s%d", strings.Title(functionInfo.Name), testNum)
+	methodName := fmt.Sprintf("test%s%s", strings.Title(functionInfo.Name), strings.Title(testCase.ID))
 	test.WriteString(fmt.Sprintf("    @Test\n"))
-	test.WriteString(fmt.Sprintf("    @DisplayName(\"%s\")\n", jg.escapeString(testCase.Description, "java")))
+	test.WriteString(fmt.Sprintf("    @DisplayName(\"%s: %s\")\n", testCase.ID, jg.escapeString(testCase.Description, "java")))
 	test.WriteString(fmt.Sprintf("    void %s() {\n", methodName))
 
 	// Create instance if needed
@@ -108,9 +108,9 @@ func (jg *JavaGenerator) generateStandardTest(testCase types.TestCase, functionI
 func (jg *JavaGenerator) generateCustomTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, className string, testNum int) string {
 	var test strings.Builder
 
-	methodName := fmt.Sprintf("testCustom%d", testNum)
+	methodName := fmt.Sprintf("testCustom%s", strings.Title(testCase.ID))
 	test.WriteString(fmt.Sprintf("    @Test\n"))
-	test.WriteString(fmt.Sprintf("    @DisplayName(\"%s\")\n", jg.escapeString(testCase.Description, "java")))
+	test.WriteString(fmt.Sprintf("    @DisplayName(\"Custom %s: %s\")\n", testCase.ID, jg.escapeString(testCase.Description, "java")))
 	test.WriteString(fmt.Sprintf("    void %s() {\n", methodName))
 
 	// Create instance

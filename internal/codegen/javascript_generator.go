@@ -62,7 +62,7 @@ func (jsg *JavaScriptGenerator) GenerateTestCode(solution string, testCases []ty
 func (jsg *JavaScriptGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	testTitle := fmt.Sprintf("Test %d: %s", testNum, testCase.Description)
+	testTitle := fmt.Sprintf("%s: %s", testCase.ID, testCase.Description)
 	test.WriteString(fmt.Sprintf("    test('%s', () => {\n", jsg.escapeString(testTitle, "javascript")))
 
 	// Parse input arguments
@@ -91,7 +91,7 @@ func (jsg *JavaScriptGenerator) generateStandardTest(testCase types.TestCase, fu
 func (jsg *JavaScriptGenerator) generateCustomTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	testTitle := fmt.Sprintf("Custom Test %d: %s", testNum, testCase.Description)
+	testTitle := fmt.Sprintf("Custom %s: %s", testCase.ID, testCase.Description)
 	test.WriteString(fmt.Sprintf("    test('%s', () => {\n", jsg.escapeString(testTitle, "javascript")))
 
 	// Add custom validation code with proper indentation

@@ -70,7 +70,7 @@ func (cg *CppGenerator) GenerateTestCode(solution string, testCases []types.Test
 func (cg *CppGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	test.WriteString(fmt.Sprintf("TEST_CASE(\"Test %d: %s\") {\n", testNum, cg.escapeString(testCase.Description, "c_plus_plus")))
+	test.WriteString(fmt.Sprintf("TEST_CASE(\"%s: %s\") {\n", testCase.ID, cg.escapeString(testCase.Description, "c_plus_plus")))
 
 	// Parse input parameters
 	inputArgs := cg.parseInputArguments(testCase.Input, functionInfo)
