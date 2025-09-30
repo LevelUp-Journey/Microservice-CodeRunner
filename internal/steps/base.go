@@ -146,7 +146,7 @@ func NormalizeLanguage(language string) string {
 		return "python"
 	case "java":
 		return "java"
-	case "cpp", "c++", "cxx":
+	case "cpp", "c++", "cxx", "c_plus_plus":
 		return "cpp"
 	case "csharp", "c#", "cs", "dotnet":
 		return "csharp"

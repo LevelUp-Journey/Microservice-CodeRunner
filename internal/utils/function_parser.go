@@ -25,7 +25,7 @@ func NewFunctionParser() *FunctionParser {
 	return &FunctionParser{
 		patterns: map[string]*regexp.Regexp{
 			// C++ function patterns (supports various formats)
-			"cpp": regexp.MustCompile(`(?m)^\s*(?:(?:inline|static|virtual|extern)\s+)*(?:[\w:]+\s+)*(\w+)\s*\([^)]*\)\s*(?:const)?\s*(?:\{|;)`),
+			"c_plus_plus": regexp.MustCompile(`(?m)^\s*(?:(?:inline|static|virtual|extern)\s+)*(?:[\w:]+\s+)*(\w+)\s*\([^)]*\)\s*(?:const)?\s*(?:\{|;)`),
 
 			// Python function patterns (def and async def)
 			"python": regexp.MustCompile(`(?m)^\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->\s*[\w\[\], ]+)?\s*:`),
@@ -86,7 +86,7 @@ func (fp *FunctionParser) ParseFunctions(code, language string) ([]FunctionInfo,
 
 		// Language-specific parameter extraction
 		switch strings.ToLower(language) {
-		case "cpp", "java":
+		case "c_plus_plus", "java":
 			function.Parameters = fp.extractParametersFromMatch(match[0], language)
 		case "python":
 			function.Parameters = fp.extractPythonParameters(match[0])
@@ -213,7 +213,7 @@ func (fp *FunctionParser) GetMainFunction(code, language string) (*FunctionInfo,
 
 	// Language-specific main function patterns
 	mainPatterns := map[string][]string{
-		"cpp":        {"main"},
+		"c_plus_plus": {"main"},
 		"python":     {"main", "solve", "solution"},
 		"javascript": {"main", "solve", "solution", "default"},
 		"java":       {"main"},
