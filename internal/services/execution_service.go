@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -26,14 +27,16 @@ func NewExecutionService(repo *repository.ExecutionRepository) *ExecutionService
 // CreateExecution creates a new execution record
 func (s *ExecutionService) CreateExecution(solutionID, challengeID, studentID, code, language string) (*models.Execution, error) {
 	execution := &models.Execution{
-		SolutionID:  solutionID,
-		ChallengeID: challengeID,
-		StudentID:   studentID,
-		Language:    language,
-		Code:        code,
-		Status:      models.StatusPending,
-		TotalTests:  0,
-		PassedTests: 0,
+		SolutionID:      solutionID,
+		ChallengeID:     challengeID,
+		StudentID:       studentID,
+		Language:        language,
+		Code:            code,
+		Status:          models.StatusPending,
+		TotalTests:      0,
+		PassedTests:     0,
+		ApprovedTestIDs: []string{}, // Initialize empty array to avoid nil JSON serialization issues
+		FailedTestIDs:   []string{}, // Initialize empty array to avoid nil JSON serialization issues
 	}
 
 	// Get server instance name
@@ -65,6 +68,10 @@ func (s *ExecutionService) StartExecution(executionID uuid.UUID) error {
 		StepOrder:   0,
 		Status:      models.StatusRunning,
 		StartedAt:   timePtr(time.Now()),
+		Metadata:    s.ensureValidJSON(map[string]interface{}{
+			"step_type": "initialization",
+			"started_at": time.Now().Format(time.RFC3339),
+		}),
 	}
 
 	if err := s.repo.AddExecutionStep(step); err != nil {
@@ -94,6 +101,7 @@ func (s *ExecutionService) AddExecutionStep(executionID uuid.UUID, stepName stri
 		StepName:    stepName,
 		StepOrder:   stepOrder,
 		Status:      models.StatusPending,
+		Metadata:    s.ensureValidJSON(nil), // Initialize with empty JSON
 	}
 
 	if err := s.repo.AddExecutionStep(step); err != nil {
@@ -131,7 +139,9 @@ func (s *ExecutionService) CompleteExecutionStep(stepID uuid.UUID, metadata stri
 	now := time.Now()
 	step.Status = models.StatusCompleted
 	step.CompletedAt = &now
-	step.Metadata = metadata
+	
+	// Serialize metadata to valid JSON before persisting
+	step.Metadata = s.ensureValidJSON(metadata)
 
 	// Calculate duration if started
 	if step.StartedAt != nil {
@@ -183,10 +193,22 @@ func (s *ExecutionService) CompleteExecution(executionID uuid.UUID, success bool
 	execution.Status = models.StatusCompleted
 	execution.Success = success
 	execution.Message = message
-	execution.ApprovedTestIDs = approvedTestIDs
-	execution.FailedTestIDs = failedTestIDs
-	execution.TotalTests = len(approvedTestIDs) + len(failedTestIDs)
-	execution.PassedTests = len(approvedTestIDs)
+	
+	// Ensure arrays are not nil to avoid JSON serialization issues
+	if approvedTestIDs == nil {
+		execution.ApprovedTestIDs = []string{}
+	} else {
+		execution.ApprovedTestIDs = approvedTestIDs
+	}
+	
+	if failedTestIDs == nil {
+		execution.FailedTestIDs = []string{}
+	} else {
+		execution.FailedTestIDs = failedTestIDs
+	}
+	
+	execution.TotalTests = len(execution.ApprovedTestIDs) + len(execution.FailedTestIDs)
+	execution.PassedTests = len(execution.ApprovedTestIDs)
 	execution.ExecutionTimeMs = &executionTimeMs
 	execution.MemoryUsageMB = &memoryUsageMB
 
@@ -203,7 +225,7 @@ func (s *ExecutionService) CompleteExecution(executionID uuid.UUID, success bool
 	logEntry := &models.ExecutionLog{
 		ExecutionID: executionID,
 		Level:       logLevel,
-		Message:     fmt.Sprintf("Execution completed. Success: %t, Passed: %d/%d tests", success, len(approvedTestIDs), execution.TotalTests),
+		Message:     fmt.Sprintf("Execution completed. Success: %t, Passed: %d/%d tests", success, len(execution.ApprovedTestIDs), execution.TotalTests),
 		Source:      "system",
 		Timestamp:   time.Now(),
 	}
@@ -213,7 +235,7 @@ func (s *ExecutionService) CompleteExecution(executionID uuid.UUID, success bool
 	}
 
 	log.Printf("✅ Execution %s completed. Success: %t, Tests: %d/%d passed",
-		executionID, success, len(approvedTestIDs), execution.TotalTests)
+		executionID, success, len(execution.ApprovedTestIDs), execution.TotalTests)
 
 	return nil
 }
@@ -340,4 +362,51 @@ func (s *ExecutionService) DeleteExecutionStep(stepID uuid.UUID) error {
 // Helper function to create time pointer
 func timePtr(t time.Time) *time.Time {
 	return &t
+}
+
+// ensureValidJSON ensures that the provided payload is valid JSON
+func (s *ExecutionService) ensureValidJSON(payload interface{}) string {
+	if payload == nil {
+		return "{}" // fallback seguro
+	}
+
+	// If it's already a string, validate it
+	if str, ok := payload.(string); ok {
+		if str == "" {
+			return "{}"
+		}
+		
+		// Check if it's valid JSON
+		var js interface{}
+		if err := json.Unmarshal([]byte(str), &js); err != nil {
+			// If not valid JSON, wrap it as a message
+			validPayload := map[string]interface{}{
+				"message": str,
+				"error":   "invalid_json_format",
+			}
+			if jsonBytes, err := json.Marshal(validPayload); err == nil {
+				return string(jsonBytes)
+			}
+			return "{}" // ultimate fallback
+		}
+		return str // already valid JSON string
+	}
+
+	// For any other type, marshal it to JSON
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("⚠️ Failed to marshal payload to JSON: %v", err)
+		// Create a safe fallback with error info
+		fallbackPayload := map[string]interface{}{
+			"error":           "marshal_failed",
+			"original_type":   fmt.Sprintf("%T", payload),
+			"error_message":   err.Error(),
+		}
+		if jsonBytes, err := json.Marshal(fallbackPayload); err == nil {
+			return string(jsonBytes)
+		}
+		return "{}" // ultimate fallback
+	}
+
+	return string(jsonBytes)
 }

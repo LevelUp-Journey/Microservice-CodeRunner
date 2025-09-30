@@ -17,7 +17,7 @@ type CppGenerator struct {
 func NewCppGenerator() TestGenerator {
 	return &CppGenerator{
 		BaseGenerator: &BaseGenerator{
-			language:      "cpp",
+			language:      "c_plus_plus",
 			fileExtension: ".cpp",
 			executionCmd:  "g++ -std=c++17 -I/usr/local/include main.cpp -o test_runner && ./test_runner",
 		},
@@ -53,7 +53,7 @@ func (cg *CppGenerator) GenerateTestCode(solution string, testCases []types.Test
 
 		if testCase.HasCustomValidation() {
 			// Custom validation code
-			testCode.WriteString(fmt.Sprintf("TEST_CASE(\"Custom Test %d: %s\") {\n", i+1, cg.escapeString(testCase.Description, "cpp")))
+			testCode.WriteString(fmt.Sprintf("TEST_CASE(\"Custom Test %d: %s\") {\n", i+1, cg.escapeString(testCase.Description, "c_plus_plus")))
 			testCode.WriteString("    // Custom validation code\n")
 			testCode.WriteString("    " + testCase.CustomValidationCode + "\n")
 			testCode.WriteString("}\n\n")
@@ -70,7 +70,7 @@ func (cg *CppGenerator) GenerateTestCode(solution string, testCases []types.Test
 func (cg *CppGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	test.WriteString(fmt.Sprintf("TEST_CASE(\"Test %d: %s\") {\n", testNum, cg.escapeString(testCase.Description, "cpp")))
+	test.WriteString(fmt.Sprintf("TEST_CASE(\"Test %d: %s\") {\n", testNum, cg.escapeString(testCase.Description, "c_plus_plus")))
 
 	// Parse input parameters
 	inputArgs := cg.parseInputArguments(testCase.Input, functionInfo)
@@ -87,7 +87,7 @@ func (cg *CppGenerator) generateStandardTest(testCase types.TestCase, functionIn
 	if isNumeric(expectedOutput) {
 		test.WriteString(fmt.Sprintf("    CHECK(result == %s);\n", expectedOutput))
 	} else {
-		test.WriteString(fmt.Sprintf("    CHECK(result == \"%s\");\n", cg.escapeString(expectedOutput, "cpp")))
+		test.WriteString(fmt.Sprintf("    CHECK(result == \"%s\");\n", cg.escapeString(expectedOutput, "c_plus_plus")))
 	}
 
 	test.WriteString("}\n\n")
@@ -110,7 +110,7 @@ func (cg *CppGenerator) parseInputArguments(input string, functionInfo *utils.Fu
 		if isNumeric(part) {
 			args = append(args, part)
 		} else {
-			args = append(args, fmt.Sprintf("\"%s\"", cg.escapeString(part, "cpp")))
+			args = append(args, fmt.Sprintf("\"%s\"", cg.escapeString(part, "c_plus_plus")))
 		}
 	}
 

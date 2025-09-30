@@ -27,7 +27,7 @@ func (pl ProgrammingLanguage) String() string {
 	case ProgrammingLanguageJava:
 		return "java"
 	case ProgrammingLanguageCpp:
-		return "cpp"
+		return "c_plus_plus"
 	case ProgrammingLanguageCsharp:
 		return "csharp"
 	case ProgrammingLanguageGo:
@@ -50,7 +50,7 @@ func ProgrammingLanguageFromString(lang string) ProgrammingLanguage {
 		return ProgrammingLanguagePython
 	case "java":
 		return ProgrammingLanguageJava
-	case "cpp", "c++":
+	case "c_plus_plus", "cpp", "c++":
 		return ProgrammingLanguageCpp
 	case "csharp", "c#":
 		return ProgrammingLanguageCsharp
