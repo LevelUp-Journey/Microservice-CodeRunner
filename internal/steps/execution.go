@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"code-runner/internal/pipeline"
+	"code-runner/internal/types"
 )
 
 // ExecutionStep handles the actual execution of compiled/interpreted code
@@ -77,13 +78,13 @@ func (e *ExecutionStep) Execute(ctx context.Context, data *pipeline.ExecutionDat
 }
 
 // getTestCases retrieves test cases from execution data
-func (e *ExecutionStep) getTestCases(data *pipeline.ExecutionData) ([]TestCase, error) {
+func (e *ExecutionStep) getTestCases(data *pipeline.ExecutionData) ([]types.TestCase, error) {
 	testCasesJSON, exists := data.Metadata["test_cases_json"]
 	if !exists {
 		return nil, fmt.Errorf("test cases not found in execution data")
 	}
 
-	var testCases []TestCase
+	var testCases []types.TestCase
 	if err := json.Unmarshal([]byte(testCasesJSON), &testCases); err != nil {
 		return nil, fmt.Errorf("failed to deserialize test cases: %w", err)
 	}
@@ -92,7 +93,7 @@ func (e *ExecutionStep) getTestCases(data *pipeline.ExecutionData) ([]TestCase, 
 }
 
 // executeTests runs all test cases
-func (e *ExecutionStep) executeTests(ctx context.Context, data *pipeline.ExecutionData, testCases []TestCase) error {
+func (e *ExecutionStep) executeTests(ctx context.Context, data *pipeline.ExecutionData, testCases []types.TestCase) error {
 	// Create execution context with timeout
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(data.Config.TimeoutSeconds)*time.Second)
 	defer cancel()
@@ -141,7 +142,7 @@ func (e *ExecutionStep) createExecutor(data *pipeline.ExecutionData) (*CodeExecu
 }
 
 // executeSingleTest executes a single test case
-func (e *ExecutionStep) executeSingleTest(ctx context.Context, data *pipeline.ExecutionData, testCase TestCase, executor *CodeExecutor) (*pipeline.TestResult, error) {
+func (e *ExecutionStep) executeSingleTest(ctx context.Context, data *pipeline.ExecutionData, testCase types.TestCase, executor *CodeExecutor) (*pipeline.TestResult, error) {
 	startTime := time.Now()
 
 	// Create test-specific timeout

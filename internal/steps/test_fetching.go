@@ -7,21 +7,12 @@ import (
 	"strconv"
 
 	"code-runner/internal/pipeline"
+	"code-runner/internal/types"
 )
 
 // TestFetchingStep fetches test cases for the solution (simplified with mock data)
 type TestFetchingStep struct {
 	*BaseStep
-}
-
-// TestCase represents a test case for execution
-type TestCase struct {
-	ID             string `json:"id"`
-	Input          string `json:"input"`
-	ExpectedOutput string `json:"expected_output"`
-	Description    string `json:"description,omitempty"`
-	IsPublic       bool   `json:"is_public,omitempty"`
-	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 }
 
 // NewTestFetchingStep creates a new test fetching step
@@ -54,11 +45,11 @@ func (t *TestFetchingStep) Execute(ctx context.Context, data *pipeline.Execution
 }
 
 // generateMockTestCases creates mock test cases based on language and challenge
-func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) []TestCase {
+func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) []types.TestCase {
 	// Generate different test cases based on challenge type
 	switch challengeID {
 	case "factorial", "challenge_456":
-		return []TestCase{
+		return []types.TestCase{
 			{
 				ID:             "test_1",
 				Input:          "5",
@@ -85,7 +76,7 @@ func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) [
 			},
 		}
 	case "sum", "addition":
-		return []TestCase{
+		return []types.TestCase{
 			{
 				ID:             "sum_test_1",
 				Input:          "2 3",
@@ -112,7 +103,7 @@ func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) [
 			},
 		}
 	case "reverse", "string_reverse":
-		return []TestCase{
+		return []types.TestCase{
 			{
 				ID:             "reverse_test_1",
 				Input:          "hello",
@@ -139,7 +130,7 @@ func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) [
 			},
 		}
 	case "hello_world", "print":
-		return []TestCase{
+		return []types.TestCase{
 			{
 				ID:             "hello_test_1",
 				Input:          "",
@@ -151,7 +142,7 @@ func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) [
 		}
 	default:
 		// Default simple test cases
-		return []TestCase{
+		return []types.TestCase{
 			{
 				ID:             "default_test_1",
 				Input:          "test",
@@ -173,7 +164,7 @@ func (t *TestFetchingStep) generateMockTestCases(language, challengeID string) [
 }
 
 // storeTestCases stores test cases in execution data
-func (t *TestFetchingStep) storeTestCases(data *pipeline.ExecutionData, testCases []TestCase) error {
+func (t *TestFetchingStep) storeTestCases(data *pipeline.ExecutionData, testCases []types.TestCase) error {
 	if len(testCases) == 0 {
 		return fmt.Errorf("no test cases generated")
 	}
@@ -216,13 +207,13 @@ func (t *TestFetchingStep) storeTestCases(data *pipeline.ExecutionData, testCase
 }
 
 // GetTestCasesFromData extracts test cases from execution data
-func (t *TestFetchingStep) GetTestCasesFromData(data *pipeline.ExecutionData) ([]TestCase, error) {
+func (t *TestFetchingStep) GetTestCasesFromData(data *pipeline.ExecutionData) ([]types.TestCase, error) {
 	testCasesJSON, exists := data.Metadata["test_cases_json"]
 	if !exists {
 		return nil, fmt.Errorf("test cases not found in execution data")
 	}
 
-	var testCases []TestCase
+	var testCases []types.TestCase
 	if err := json.Unmarshal([]byte(testCasesJSON), &testCases); err != nil {
 		return nil, fmt.Errorf("failed to deserialize test cases: %w", err)
 	}
