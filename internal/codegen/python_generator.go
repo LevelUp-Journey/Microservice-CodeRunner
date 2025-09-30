@@ -66,7 +66,7 @@ func (pg *PythonGenerator) GenerateTestCode(solution string, testCases []types.T
 func (pg *PythonGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	methodName := fmt.Sprintf("test_%s_%d", strings.ToLower(functionInfo.Name), testNum)
+	methodName := fmt.Sprintf("test_%s_%s", strings.ToLower(functionInfo.Name), testCase.ID)
 	test.WriteString(fmt.Sprintf("    def %s(self):\n", methodName))
 	test.WriteString(fmt.Sprintf("        \"\"\"%s\"\"\"\n", pg.escapeString(testCase.Description, "python")))
 
@@ -96,7 +96,7 @@ func (pg *PythonGenerator) generateStandardTest(testCase types.TestCase, functio
 func (pg *PythonGenerator) generateCustomTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	methodName := fmt.Sprintf("test_custom_%d", testNum)
+	methodName := fmt.Sprintf("test_custom_%s", testCase.ID)
 	test.WriteString(fmt.Sprintf("    def %s(self):\n", methodName))
 	test.WriteString(fmt.Sprintf("        \"\"\"%s\"\"\"\n", pg.escapeString(testCase.Description, "python")))
 

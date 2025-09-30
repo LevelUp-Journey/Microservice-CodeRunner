@@ -64,9 +64,9 @@ func (gg *GoGenerator) GenerateTestCode(solution string, testCases []types.TestC
 func (gg *GoGenerator) generateStandardTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	testName := fmt.Sprintf("Test%s%d", strings.Title(functionInfo.Name), testNum)
+	testName := fmt.Sprintf("Test%s%s", strings.Title(functionInfo.Name), strings.Title(testCase.ID))
 	test.WriteString(fmt.Sprintf("func %s(t *testing.T) {\n", testName))
-	test.WriteString(fmt.Sprintf("    // %s\n", testCase.Description))
+	test.WriteString(fmt.Sprintf("    // %s: %s\n", testCase.ID, testCase.Description))
 
 	// Parse input arguments
 	inputArgs := gg.parseInputArguments(testCase.Input)
@@ -103,9 +103,9 @@ func (gg *GoGenerator) generateStandardTest(testCase types.TestCase, functionInf
 func (gg *GoGenerator) generateCustomTest(testCase types.TestCase, functionInfo *utils.FunctionInfo, testNum int) string {
 	var test strings.Builder
 
-	testName := fmt.Sprintf("TestCustom%d", testNum)
+	testName := fmt.Sprintf("TestCustom%s", strings.Title(testCase.ID))
 	test.WriteString(fmt.Sprintf("func %s(t *testing.T) {\n", testName))
-	test.WriteString(fmt.Sprintf("    // %s\n", testCase.Description))
+	test.WriteString(fmt.Sprintf("    // Custom %s: %s\n", testCase.ID, testCase.Description))
 
 	// Add custom validation code with proper indentation
 	customCode := strings.ReplaceAll(testCase.CustomValidationCode, "\n", "\n    ")

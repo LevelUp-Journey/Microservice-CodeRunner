@@ -149,6 +149,7 @@ func (d *Database) AutoMigrate() error {
 		&models.ExecutionStep{},
 		&models.ExecutionLog{},
 		&models.TestResult{},
+		&models.GeneratedTestCode{},
 	)
 
 	if err != nil {

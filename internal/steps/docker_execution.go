@@ -5,20 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"code-runner/internal/codegen"
+	"code-runner/internal/database/models"
+	"code-runner/internal/database/repository"
 	"code-runner/internal/docker"
 	"code-runner/internal/pipeline"
 	"code-runner/internal/types"
 	"code-runner/internal/utils"
+
+	"github.com/google/uuid"
 )
 
 // DockerExecutionStep handles code execution using Docker containers
 type DockerExecutionStep struct {
 	*BaseStep
-	dockerExecutor  *docker.DockerExecutor
-	generatorFactory *codegen.GeneratorFactory
-	functionParser  *utils.FunctionParser
+	dockerExecutor        *docker.DockerExecutor
+	generatorFactory      *codegen.GeneratorFactory
+	functionParser        *utils.FunctionParser
+	generatedTestCodeRepo *repository.GeneratedTestCodeRepository
 }
 
 // NewDockerExecutionStep creates a new Docker-based execution step
@@ -28,6 +34,17 @@ func NewDockerExecutionStep(logger pipeline.Logger) pipeline.PipelineStep {
 		dockerExecutor:   docker.NewDockerExecutor(logger),
 		generatorFactory: codegen.NewGeneratorFactory(),
 		functionParser:   utils.NewFunctionParser(),
+	}
+}
+
+// NewDockerExecutionStepWithRepo creates a new Docker-based execution step with database repository
+func NewDockerExecutionStepWithRepo(logger pipeline.Logger, generatedTestCodeRepo *repository.GeneratedTestCodeRepository) pipeline.PipelineStep {
+	return &DockerExecutionStep{
+		BaseStep:              NewBaseStep("docker_execution", 4),
+		dockerExecutor:        docker.NewDockerExecutor(logger),
+		generatorFactory:      codegen.NewGeneratorFactory(),
+		functionParser:        utils.NewFunctionParser(),
+		generatedTestCodeRepo: generatedTestCodeRepo,
 	}
 }
 
@@ -135,7 +152,7 @@ func (des *DockerExecutionStep) parseFunctionInfo(data *pipeline.ExecutionData) 
 	mainFunction, err := des.functionParser.GetMainFunction(data.Code, data.Language)
 	if err != nil {
 		des.AddLog(data, pipeline.LogLevelWarn, fmt.Sprintf("Could not identify main function: %v", err))
-		
+
 		// Fall back to parsing all functions and using the first one
 		functions, parseErr := des.functionParser.ParseFunctions(data.Code, data.Language)
 		if parseErr != nil || len(functions) == 0 {
@@ -150,6 +167,7 @@ func (des *DockerExecutionStep) parseFunctionInfo(data *pipeline.ExecutionData) 
 
 // generateTestCode generates the complete test code including solution and tests
 func (des *DockerExecutionStep) generateTestCode(data *pipeline.ExecutionData, testCases []types.TestCase, functionInfo *utils.FunctionInfo) (string, error) {
+	startTime := time.Now()
 	des.AddLog(data, pipeline.LogLevelDebug, "Generating test code")
 
 	// Get appropriate generator for the language
@@ -164,7 +182,19 @@ func (des *DockerExecutionStep) generateTestCode(data *pipeline.ExecutionData, t
 		return "", fmt.Errorf("failed to generate test code: %w", err)
 	}
 
-	des.AddLog(data, pipeline.LogLevelDebug, fmt.Sprintf("Generated test code (%d bytes)", len(testCode)))
+	generationTime := time.Since(startTime)
+	des.AddLog(data, pipeline.LogLevelDebug, fmt.Sprintf("Generated test code (%d bytes) in %v", len(testCode), generationTime))
+
+	// Save generated test code to database if repository is available
+	if des.generatedTestCodeRepo != nil && data.DatabaseExecutionID != uuid.Nil {
+		if err := des.saveGeneratedTestCode(data, testCode, generator, generationTime, testCases); err != nil {
+			des.AddLog(data, pipeline.LogLevelWarn, fmt.Sprintf("Failed to save generated test code to database: %v", err))
+			// Don't fail the execution if database save fails
+		} else {
+			des.AddLog(data, pipeline.LogLevelDebug, "Successfully saved generated test code to database")
+		}
+	}
+
 	return testCode, nil
 }
 
@@ -180,13 +210,13 @@ func (des *DockerExecutionStep) executeInDocker(ctx context.Context, data *pipel
 
 	// Prepare container configuration
 	config := &docker.ContainerConfig{
-		Language:         data.Language,
-		ImageName:        des.dockerExecutor.GetImageName(data.Language),
-		MemoryLimitMB:    data.Config.MemoryLimitMB,
-		TimeoutSeconds:   data.Config.TimeoutSeconds,
-		NetworkDisabled:  !data.Config.EnableNetwork,
-		ReadOnlyMode:     true,
-		EnvironmentVars:  data.Config.EnvironmentVariables,
+		Language:        data.Language,
+		ImageName:       des.dockerExecutor.GetImageName(data.Language),
+		MemoryLimitMB:   data.Config.MemoryLimitMB,
+		TimeoutSeconds:  data.Config.TimeoutSeconds,
+		NetworkDisabled: !data.Config.EnableNetwork,
+		ReadOnlyMode:    true,
+		EnvironmentVars: data.Config.EnvironmentVariables,
 	}
 
 	// Prepare files for execution
@@ -298,4 +328,35 @@ func (des *DockerExecutionStep) parseTestResults(data *pipeline.ExecutionData, r
 	}
 
 	data.Message = fmt.Sprintf("Passed %d/%d tests", passedCount, len(testCases))
+}
+
+// saveGeneratedTestCode saves the generated test code to the database
+func (des *DockerExecutionStep) saveGeneratedTestCode(data *pipeline.ExecutionData, testCode string, generator codegen.TestGenerator, generationTime time.Duration, testCases []types.TestCase) error {
+	// Count custom validation tests
+	customValidationCount := 0
+	for _, testCase := range testCases {
+		if testCase.HasCustomValidation() {
+			customValidationCount++
+		}
+	}
+
+	// Create generated test code record
+	generatedTestCode := &models.GeneratedTestCode{
+		ExecutionID:         data.DatabaseExecutionID,
+		Language:            data.Language,
+		GeneratorType:       generator.GetLanguage(),
+		TestCode:            testCode,
+		ChallengeID:         data.ChallengeID,
+		TestCasesCount:      len(testCases),
+		HasCustomValidation: customValidationCount > 0,
+		GenerationTimeMS:    generationTime.Milliseconds(),
+		CodeSizeBytes:       len(testCode),
+	}
+
+	// Save to database
+	if err := des.generatedTestCodeRepo.Create(generatedTestCode); err != nil {
+		return fmt.Errorf("failed to save generated test code: %w", err)
+	}
+
+	return nil
 }
