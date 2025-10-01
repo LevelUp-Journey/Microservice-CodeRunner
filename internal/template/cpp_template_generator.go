@@ -24,7 +24,7 @@ func NewCppTemplateGenerator(repo *repository.GeneratedTestCodeRepository) *CppT
 }
 
 // GenerateTemplate crea el template completo y lo guarda en la base de datos
-func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest) (*models.GeneratedTestCode, error) {
+func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest, executionID uuid.UUID) (*models.GeneratedTestCode, error) {
 	startTime := time.Now()
 
 	// Extraer nombre de función usando regex
@@ -41,7 +41,7 @@ func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest) (*m
 
 	// Crear registro para base de datos
 	record := &models.GeneratedTestCode{
-		ExecutionID:         uuid.New(),
+		ExecutionID:         executionID, // Usar el ExecutionID pasado como parámetro
 		Language:            req.Language,
 		GeneratorType:       "cpp_template",
 		TestCode:            template,
@@ -177,12 +177,17 @@ func (g *CppTemplateGenerator) buildTemplate(solutionCode, testCode string) stri
 	template := `// Start Test
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 // Solution - Start
+#include "doctest.h"
+#include <iostream>
+using namespace std;
+
 %s
 // Solution - End
 
 // Tests - Start
 %s
-// Tests - End`
+// Tests - End
+`
 
 	return fmt.Sprintf(template, solutionCode, testCode)
 }

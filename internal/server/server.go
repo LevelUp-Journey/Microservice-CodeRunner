@@ -14,19 +14,34 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"gorm.io/gorm"
 
 	pb "code-runner/api/gen/proto"
+	"code-runner/internal/database/models"
+	"code-runner/internal/database/repository"
+	"code-runner/internal/template"
 	"code-runner/internal/types"
 )
 
 // Simplified service implementation (gRPC adapter only)
 type solutionEvaluationServiceImpl struct {
 	pb.UnimplementedSolutionEvaluationServiceServer
+	executionRepo         *repository.ExecutionRepository
+	generatedTestCodeRepo *repository.GeneratedTestCodeRepository
+	templateGenerator     *template.CppTemplateGenerator
 }
 
 // NewSolutionEvaluationServiceServer creates a new simplified gRPC service implementation
-func NewSolutionEvaluationServiceServer() pb.SolutionEvaluationServiceServer {
-	return &solutionEvaluationServiceImpl{}
+func NewSolutionEvaluationServiceServer(db *gorm.DB) pb.SolutionEvaluationServiceServer {
+	executionRepo := repository.NewExecutionRepository(db)
+	generatedTestCodeRepo := repository.NewGeneratedTestCodeRepository(db)
+	templateGenerator := template.NewCppTemplateGenerator(generatedTestCodeRepo)
+
+	return &solutionEvaluationServiceImpl{
+		executionRepo:         executionRepo,
+		generatedTestCodeRepo: generatedTestCodeRepo,
+		templateGenerator:     templateGenerator,
+	}
 }
 
 // extractFunctionName extracts the function name from C++ code using regex
@@ -134,12 +149,73 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 	log.Printf("🔧 Converting to internal types...")
 	log.Printf("  ✅ Internal request created with %d test cases", len(internalReq.TestCases))
 
-	// TODO: Use the template generator here instead of mock response
-	// For now, create a simple response
+	// Create execution record
+	log.Printf("📝 Creating execution record...")
+	execution := &models.Execution{
+		SolutionID:  internalReq.SolutionID,
+		ChallengeID: internalReq.ChallengeID,
+		StudentID:   internalReq.StudentID,
+		Language:    internalReq.Language,
+		Code:        internalReq.Code,
+		Status:      models.StatusRunning,
+		TotalTests:  len(internalReq.TestCases),
+	}
+
+	if err := s.executionRepo.Create(execution); err != nil {
+		log.Printf("❌ Error creating execution record: %v", err)
+		return nil, fmt.Errorf("failed to create execution record: %w", err)
+	}
+
+	log.Printf("✅ Execution record created with ID: %s", execution.ID)
+
+	// Generate template and save to database
+	log.Printf("🔧 Generating C++ execution template...")
+	generatedTemplate, err := s.templateGenerator.GenerateTemplate(internalReq, execution.ID)
+	if err != nil {
+		log.Printf("❌ Error generating template: %v", err)
+		// Update execution status to failed
+		execution.Status = models.StatusFailed
+		execution.ErrorMessage = fmt.Sprintf("Template generation failed: %v", err)
+		s.executionRepo.Update(execution)
+		return nil, fmt.Errorf("failed to generate template: %w", err)
+	}
+
+	log.Printf("✅ Template generated and saved to database")
+	log.Printf("  📄 Template ID: %s", generatedTemplate.ID)
+	log.Printf("  📏 Template size: %d bytes", generatedTemplate.CodeSizeBytes)
+	log.Printf("  🧪 Test cases in template: %d", generatedTemplate.TestCasesCount)
+	log.Printf("  ⏱️  Generation time: %d ms", generatedTemplate.GenerationTimeMS)
+
+	// Log template preview (first 500 characters)
+	templatePreview := generatedTemplate.TestCode
+	if len(templatePreview) > 500 {
+		templatePreview = templatePreview[:500] + "\n... (truncated)"
+	}
+	log.Printf("  📝 Template preview:\n%s", templatePreview)
+
+	// Update execution with template reference
+	execution.ExecutionTimeMS = time.Since(startTime).Milliseconds()
+	execution.Status = models.StatusCompleted
+	execution.Success = true
+	execution.Message = fmt.Sprintf("Template generated successfully (ID: %s)", generatedTemplate.ID)
+
+	// Convert test IDs to comma-separated string
+	approvedIDs := make([]string, len(internalReq.TestCases))
+	for i, tc := range internalReq.TestCases {
+		approvedIDs[i] = tc.TestID
+	}
+	execution.SetApprovedTestIDs(approvedIDs)
+	execution.PassedTests = len(internalReq.TestCases)
+
+	if err := s.executionRepo.Update(execution); err != nil {
+		log.Printf("❌ Error updating execution record: %v", err)
+		return nil, fmt.Errorf("failed to update execution record: %w", err)
+	}
+
+	// Prepare response
 	approvedTests := make([]string, len(req.Tests))
 	for i, tc := range req.Tests {
 		approvedTests[i] = tc.CodeVersionTestId
-		log.Printf("  ✅ Approving test: %s", tc.CodeVersionTestId)
 	}
 
 	executionTime := time.Since(startTime)
@@ -170,12 +246,14 @@ func convertTestCases(protoTests []*pb.TestCase) []*types.TestCase {
 }
 
 // StartServer starts the gRPC server (simplified version)
-func StartServer(port string) error {
+func StartServer(port string, db *gorm.DB) error {
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		log.Printf("❌ Failed to create listener on port %s: %v", port, err)
 		return err
 	}
+	log.Printf("✅ Listener created on port %s", port)
 
 	// Configure gRPC server options to match Spring Boot client configuration
 	// - Max inbound message size: 8MB (as configured in Spring Boot)
@@ -188,10 +266,12 @@ func StartServer(port string) error {
 
 	// Create gRPC server with options
 	grpcServer := grpc.NewServer(serverOptions...)
+	log.Printf("✅ gRPC server created")
 
 	// Register service
-	service := NewSolutionEvaluationServiceServer()
+	service := NewSolutionEvaluationServiceServer(db)
 	pb.RegisterSolutionEvaluationServiceServer(grpcServer, service)
+	log.Printf("✅ Service registered")
 
 	log.Printf("🚀 Starting gRPC server on port %s (plaintext, max msg size: %dMB)", port, maxMsgSize/(1024*1024))
 
@@ -206,9 +286,12 @@ func StartServer(port string) error {
 	}()
 
 	// Start server
+	log.Printf("🚀 Calling grpcServer.Serve(lis)")
 	if err := grpcServer.Serve(lis); err != nil {
+		log.Printf("❌ grpcServer.Serve failed: %v", err)
 		return err
 	}
+	log.Printf("✅ Server stopped gracefully")
 
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"code-runner/env"
+	"code-runner/internal/database"
 	"code-runner/internal/server"
 )
 
@@ -14,6 +15,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
+
+	// Initialize database
+	if err := database.InitDB(&config.Database); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}()
 
 	// Print startup information
 	log.Printf("🚀 Starting %s gRPC Server", config.App.Name)
@@ -29,7 +40,7 @@ func main() {
 	}
 
 	// Start gRPC server
-	if err := server.StartServer(port); err != nil {
+	if err := server.StartServer(port, database.GetDB()); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 
