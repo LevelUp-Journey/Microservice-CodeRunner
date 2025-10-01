@@ -167,13 +167,21 @@ func (x *TestCase) GetCustomValidationCode() string {
 	return ""
 }
 
-// Response with approved test IDs
+// Response with approved test IDs and execution metrics
 type ExecutionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApprovedTests []string               `protobuf:"bytes,1,rep,name=approved_tests,json=approvedTests,proto3" json:"approved_tests,omitempty"`
-	Completed     bool                   `protobuf:"varint,2,opt,name=completed,proto3" json:"completed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ApprovedTests   []string               `protobuf:"bytes,1,rep,name=approved_tests,json=approvedTests,proto3" json:"approved_tests,omitempty"`
+	Completed       bool                   `protobuf:"varint,2,opt,name=completed,proto3" json:"completed,omitempty"`
+	ExecutionTimeMs int64                  `protobuf:"varint,3,opt,name=execution_time_ms,json=executionTimeMs,proto3" json:"execution_time_ms,omitempty"`
+	TotalTests      int32                  `protobuf:"varint,4,opt,name=total_tests,json=totalTests,proto3" json:"total_tests,omitempty"`
+	PassedTests     int32                  `protobuf:"varint,5,opt,name=passed_tests,json=passedTests,proto3" json:"passed_tests,omitempty"`
+	FailedTests     int32                  `protobuf:"varint,6,opt,name=failed_tests,json=failedTests,proto3" json:"failed_tests,omitempty"`
+	Success         bool                   `protobuf:"varint,7,opt,name=success,proto3" json:"success,omitempty"`
+	Message         string                 `protobuf:"bytes,8,opt,name=message,proto3" json:"message,omitempty"`
+	ErrorMessage    string                 `protobuf:"bytes,9,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	ErrorType       string                 `protobuf:"bytes,10,opt,name=error_type,json=errorType,proto3" json:"error_type,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ExecutionResponse) Reset() {
@@ -220,6 +228,62 @@ func (x *ExecutionResponse) GetCompleted() bool {
 	return false
 }
 
+func (x *ExecutionResponse) GetExecutionTimeMs() int64 {
+	if x != nil {
+		return x.ExecutionTimeMs
+	}
+	return 0
+}
+
+func (x *ExecutionResponse) GetTotalTests() int32 {
+	if x != nil {
+		return x.TotalTests
+	}
+	return 0
+}
+
+func (x *ExecutionResponse) GetPassedTests() int32 {
+	if x != nil {
+		return x.PassedTests
+	}
+	return 0
+}
+
+func (x *ExecutionResponse) GetFailedTests() int32 {
+	if x != nil {
+		return x.FailedTests
+	}
+	return 0
+}
+
+func (x *ExecutionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ExecutionResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ExecutionResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *ExecutionResponse) GetErrorType() string {
+	if x != nil {
+		return x.ErrorType
+	}
+	return ""
+}
+
 var File_api_proto_code_runner_proto protoreflect.FileDescriptor
 
 const file_api_proto_code_runner_proto_rawDesc = "" +
@@ -236,10 +300,21 @@ const file_api_proto_code_runner_proto_rawDesc = "" +
 	"\x14code_version_test_id\x18\x01 \x01(\tR\x11codeVersionTestId\x12\x14\n" +
 	"\x05input\x18\x02 \x01(\tR\x05input\x12'\n" +
 	"\x0fexpected_output\x18\x03 \x01(\tR\x0eexpectedOutput\x124\n" +
-	"\x16custom_validation_code\x18\x04 \x01(\tR\x14customValidationCode\"X\n" +
+	"\x16custom_validation_code\x18\x04 \x01(\tR\x14customValidationCode\"\xe3\x02\n" +
 	"\x11ExecutionResponse\x12%\n" +
 	"\x0eapproved_tests\x18\x01 \x03(\tR\rapprovedTests\x12\x1c\n" +
-	"\tcompleted\x18\x02 \x01(\bR\tcompleted2\x92\x01\n" +
+	"\tcompleted\x18\x02 \x01(\bR\tcompleted\x12*\n" +
+	"\x11execution_time_ms\x18\x03 \x01(\x03R\x0fexecutionTimeMs\x12\x1f\n" +
+	"\vtotal_tests\x18\x04 \x01(\x05R\n" +
+	"totalTests\x12!\n" +
+	"\fpassed_tests\x18\x05 \x01(\x05R\vpassedTests\x12!\n" +
+	"\ffailed_tests\x18\x06 \x01(\x05R\vfailedTests\x12\x18\n" +
+	"\asuccess\x18\a \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\b \x01(\tR\amessage\x12#\n" +
+	"\rerror_message\x18\t \x01(\tR\ferrorMessage\x12\x1d\n" +
+	"\n" +
+	"error_type\x18\n" +
+	" \x01(\tR\terrorType2\x92\x01\n" +
 	"\x19SolutionEvaluationService\x12u\n" +
 	"\x10EvaluateSolution\x12/.com.levelupjourney.coderunner.ExecutionRequest\x1a0.com.levelupjourney.coderunner.ExecutionResponseBv\n" +
 	"Ccom.levelupjourney.microservicechallenges.solutions.interfaces.grpcB\x12CodeExecutionProtoP\x01Z\x19code-runner/api/gen/protob\x06proto3"

@@ -19,6 +19,7 @@ import (
 	pb "code-runner/api/gen/proto"
 	"code-runner/internal/database/models"
 	"code-runner/internal/database/repository"
+	"code-runner/internal/docker"
 	"code-runner/internal/template"
 	"code-runner/internal/types"
 )
@@ -29,6 +30,7 @@ type solutionEvaluationServiceImpl struct {
 	executionRepo         *repository.ExecutionRepository
 	generatedTestCodeRepo *repository.GeneratedTestCodeRepository
 	templateGenerator     *template.CppTemplateGenerator
+	dockerExecutor        *docker.DockerExecutor
 }
 
 // NewSolutionEvaluationServiceServer creates a new simplified gRPC service implementation
@@ -37,10 +39,18 @@ func NewSolutionEvaluationServiceServer(db *gorm.DB) pb.SolutionEvaluationServic
 	generatedTestCodeRepo := repository.NewGeneratedTestCodeRepository(db)
 	templateGenerator := template.NewCppTemplateGenerator(generatedTestCodeRepo)
 
+	// Crear Docker executor
+	dockerExecutor, err := docker.NewDockerExecutor()
+	if err != nil {
+		log.Printf("⚠️  Warning: Failed to create Docker executor: %v", err)
+		log.Printf("⚠️  Docker execution will not be available. Make sure Docker is running.")
+	}
+
 	return &solutionEvaluationServiceImpl{
 		executionRepo:         executionRepo,
 		generatedTestCodeRepo: generatedTestCodeRepo,
 		templateGenerator:     templateGenerator,
+		dockerExecutor:        dockerExecutor,
 	}
 }
 
@@ -193,40 +203,152 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 	}
 	log.Printf("  📝 Template preview:\n%s", templatePreview)
 
-	// Update execution with template reference
-	execution.ExecutionTimeMS = time.Since(startTime).Milliseconds()
-	execution.Status = models.StatusCompleted
-	execution.Success = true
-	execution.Message = fmt.Sprintf("Template generated successfully (ID: %s)", generatedTemplate.ID)
+	// Execute code in Docker
+	var dockerResult *docker.ExecutionResult
+	if s.dockerExecutor != nil {
+		log.Printf("🐳 Executing code in Docker container...")
 
-	// Convert test IDs to comma-separated string
-	approvedIDs := make([]string, len(internalReq.TestCases))
-	for i, tc := range internalReq.TestCases {
-		approvedIDs[i] = tc.TestID
+		execConfig := docker.DefaultExecutionConfig(execution.ID, generatedTemplate.TestCode)
+
+		dockerCtx, dockerCancel := context.WithTimeout(ctx, time.Duration(execConfig.TimeoutSeconds+5)*time.Second)
+		defer dockerCancel()
+
+		dockerResult, err = s.dockerExecutor.Execute(dockerCtx, execConfig)
+		if err != nil {
+			log.Printf("❌ Docker execution error: %v", err)
+			execution.Status = models.StatusFailed
+			execution.ErrorMessage = fmt.Sprintf("Docker execution failed: %v", err)
+			execution.ErrorType = "docker_error"
+			s.executionRepo.Update(execution)
+			return nil, fmt.Errorf("failed to execute in Docker: %w", err)
+		}
+
+		log.Printf("✅ Docker execution completed")
+		log.Printf("  ⏱️  Execution time: %d ms", dockerResult.ExecutionTimeMS)
+		log.Printf("  📊 Exit code: %d", dockerResult.ExitCode)
+		log.Printf("  🧪 Tests: %d/%d passed", dockerResult.PassedTests, dockerResult.TotalTests)
+
+		// Update execution with Docker results
+		execution.Status = models.StatusCompleted
+		execution.ExecutionTimeMS = dockerResult.ExecutionTimeMS
+		execution.MemoryUsageMB = dockerResult.MemoryUsageMB
+		execution.Success = dockerResult.Success
+		execution.TotalTests = dockerResult.TotalTests
+		execution.PassedTests = dockerResult.PassedTests
+
+		// Extract approved test IDs from Docker results
+		approvedIDs := []string{}
+		failedIDs := []string{}
+
+		if len(dockerResult.TestResults) > 0 {
+			// Usar resultados individuales de tests parseados
+			for _, testResult := range dockerResult.TestResults {
+				if testResult.Passed {
+					approvedIDs = append(approvedIDs, testResult.TestID)
+				} else {
+					failedIDs = append(failedIDs, testResult.TestID)
+				}
+			}
+			log.Printf("  📋 Parsed test results: %d approved, %d failed", len(approvedIDs), len(failedIDs))
+		} else if dockerResult.Success && dockerResult.PassedTests == len(internalReq.TestCases) {
+			// Si todos pasaron pero no hay resultados individuales, aprobar todos
+			log.Printf("  ℹ️  All tests passed, approving all test IDs")
+			for _, tc := range internalReq.TestCases {
+				approvedIDs = append(approvedIDs, tc.TestID)
+			}
+		}
+
+		if dockerResult.Success {
+			execution.Message = fmt.Sprintf("Execution successful: %d/%d tests passed", dockerResult.PassedTests, dockerResult.TotalTests)
+			execution.SetApprovedTestIDs(approvedIDs)
+
+			if len(failedIDs) > 0 {
+				execution.SetFailedTestIDs(failedIDs)
+			}
+		} else {
+			if dockerResult.TimedOut {
+				execution.Status = models.StatusTimedOut
+				execution.ErrorType = "timeout"
+				execution.ErrorMessage = fmt.Sprintf("Execution timed out after %d seconds", dockerResult.ExecutionTimeMS/1000)
+			} else {
+				execution.ErrorType = "test_failure"
+				execution.ErrorMessage = dockerResult.ErrorMessage
+			}
+
+			// Guardar tests aprobados y fallados
+			execution.SetApprovedTestIDs(approvedIDs)
+			execution.SetFailedTestIDs(failedIDs)
+
+			// Log output for debugging
+			if len(dockerResult.StdOut) > 0 {
+				log.Printf("  📤 Stdout:\n%s", dockerResult.StdOut)
+			}
+			if len(dockerResult.StdErr) > 0 {
+				log.Printf("  📤 Stderr:\n%s", dockerResult.StdErr)
+			}
+		}
+	} else {
+		// Docker not available, just mark as template generated
+		log.Printf("⚠️  Docker executor not available, skipping execution")
+		execution.ExecutionTimeMS = time.Since(startTime).Milliseconds()
+		execution.Status = models.StatusCompleted
+		execution.Success = true
+		execution.Message = fmt.Sprintf("Template generated successfully (ID: %s) - Docker execution skipped", generatedTemplate.ID)
+
+		// Convert test IDs to comma-separated string
+		approvedIDs := make([]string, len(internalReq.TestCases))
+		for i, tc := range internalReq.TestCases {
+			approvedIDs[i] = tc.TestID
+		}
+		execution.SetApprovedTestIDs(approvedIDs)
+		execution.PassedTests = len(internalReq.TestCases)
 	}
-	execution.SetApprovedTestIDs(approvedIDs)
-	execution.PassedTests = len(internalReq.TestCases)
 
 	if err := s.executionRepo.Update(execution); err != nil {
 		log.Printf("❌ Error updating execution record: %v", err)
 		return nil, fmt.Errorf("failed to update execution record: %w", err)
 	}
 
-	// Prepare response
-	approvedTests := make([]string, len(req.Tests))
-	for i, tc := range req.Tests {
-		approvedTests[i] = tc.CodeVersionTestId
+	// Prepare response with actual approved tests from execution
+	var approvedTests []string
+	var errorMessage string
+	var errorType string
+
+	if dockerResult != nil {
+		// Usar los tests realmente aprobados del resultado de Docker
+		approvedTests = execution.GetApprovedTestIDs()
+		errorMessage = execution.ErrorMessage
+		errorType = execution.ErrorType
+	} else {
+		// Docker no disponible, modo desarrollo: aprobar todos
+		approvedTests = make([]string, len(req.Tests))
+		for i, tc := range req.Tests {
+			approvedTests[i] = tc.CodeVersionTestId
+		}
 	}
 
 	executionTime := time.Since(startTime)
+	totalTests := len(req.Tests)
+	passedTests := len(approvedTests)
+	failedTests := totalTests - passedTests
 
 	log.Printf("✅ ===== EXECUTION COMPLETED =====")
-	log.Printf("  ⏱️  Execution time: %d ms", executionTime.Milliseconds())
-	log.Printf("  📊 Approved tests: %d/%d", len(approvedTests), len(req.Tests))
+	log.Printf("  ⏱️  Total execution time: %d ms", executionTime.Milliseconds())
+	log.Printf("  📊 Test results: %d/%d passed, %d failed", passedTests, totalTests, failedTests)
+	log.Printf("  ✅ Approved test IDs: %v", approvedTests)
+	log.Printf("  ✅ Success: %v", execution.Success)
 
 	return &pb.ExecutionResponse{
-		ApprovedTests: approvedTests,
-		Completed:     true,
+		ApprovedTests:   approvedTests,
+		Completed:       true,
+		ExecutionTimeMs: executionTime.Milliseconds(),
+		TotalTests:      int32(totalTests),
+		PassedTests:     int32(passedTests),
+		FailedTests:     int32(failedTests),
+		Success:         execution.Success,
+		Message:         execution.Message,
+		ErrorMessage:    errorMessage,
+		ErrorType:       errorType,
 	}, nil
 }
 
