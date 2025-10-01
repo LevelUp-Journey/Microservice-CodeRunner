@@ -1,5 +1,7 @@
 package models
 
+import "strings"
+
 // ExecutionStatus represents the status of a code execution
 type ExecutionStatus string
 
@@ -29,12 +31,12 @@ type Execution struct {
 	MemoryUsageMB   float64         `gorm:"type:decimal(10,2)" json:"memory_usage_mb"`
 
 	// Results
-	Success         bool     `gorm:"type:boolean;default:false" json:"success"`
-	Message         string   `gorm:"type:text" json:"message"`
-	ApprovedTestIDs []string `gorm:"type:jsonb;default:'[]'" json:"approved_test_ids"`
-	FailedTestIDs   []string `gorm:"type:jsonb;default:'[]'" json:"failed_test_ids"`
-	TotalTests      int      `gorm:"type:integer;default:0" json:"total_tests"`
-	PassedTests     int      `gorm:"type:integer;default:0" json:"passed_tests"`
+	Success         bool   `gorm:"type:boolean;default:false" json:"success"`
+	Message         string `gorm:"type:text" json:"message"`
+	ApprovedTestIDs string `gorm:"type:text" json:"approved_test_ids"` // Comma-separated list
+	FailedTestIDs   string `gorm:"type:text" json:"failed_test_ids"`   // Comma-separated list
+	TotalTests      int    `gorm:"type:integer;default:0" json:"total_tests"`
+	PassedTests     int    `gorm:"type:integer;default:0" json:"passed_tests"`
 
 	// Error Information
 	ErrorMessage     string `gorm:"type:text" json:"error_message"`
@@ -51,4 +53,38 @@ type Execution struct {
 // TableName returns the table name for GORM
 func (Execution) TableName() string {
 	return "executions"
+}
+
+// SetApprovedTestIDs converts a slice of test IDs to a comma-separated string
+func (e *Execution) SetApprovedTestIDs(ids []string) {
+	if len(ids) == 0 {
+		e.ApprovedTestIDs = ""
+		return
+	}
+	e.ApprovedTestIDs = strings.Join(ids, ",")
+}
+
+// GetApprovedTestIDs converts the comma-separated string to a slice
+func (e *Execution) GetApprovedTestIDs() []string {
+	if e.ApprovedTestIDs == "" {
+		return []string{}
+	}
+	return strings.Split(e.ApprovedTestIDs, ",")
+}
+
+// SetFailedTestIDs converts a slice of test IDs to a comma-separated string
+func (e *Execution) SetFailedTestIDs(ids []string) {
+	if len(ids) == 0 {
+		e.FailedTestIDs = ""
+		return
+	}
+	e.FailedTestIDs = strings.Join(ids, ",")
+}
+
+// GetFailedTestIDs converts the comma-separated string to a slice
+func (e *Execution) GetFailedTestIDs() []string {
+	if e.FailedTestIDs == "" {
+		return []string{}
+	}
+	return strings.Split(e.FailedTestIDs, ",")
 }
