@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package com.levelupjourney.coderunner;
 
-option go_package = "code-runner/api/gen/coderunner/v1;coderunnerv1";
+option go_package = "code-runner/api/gen/proto";
 option java_multiple_files = true;
 option java_package = "com.levelupjourney.microservicechallenges.solutions.interfaces.grpc";
 option java_outer_classname = "CodeExecutionProto";
@@ -26,22 +26,31 @@ service CodeExecutionService {
 
 // Request for code execution
 message ExecutionRequest {
-    string solution_id = 1;
-    string challenge_id = 2;
-    string student_id = 3;
+    string code_version_id = 1;
+    string student_id = 2;
+    string language = 3;
     string code = 4;
-    string language = 5;
+    repeated TestCase test_cases = 5;
     ExecutionConfig config = 6;
+}
+
+// Test case definition
+message TestCase {
+    string code_version_test_id = 1;
+    string input = 2;
+    string expected_output = 3;
+    string custom_validation_code = 4;
 }
 
 // Response with list of approved test IDs
 message ExecutionResponse {
-    repeated string approved_test_ids = 1;
-    bool success = 2;
-    string message = 3;
-    string execution_id = 4;
-    ExecutionMetadata metadata = 5;
-    repeated PipelineStep pipeline_steps = 6;
+    repeated string passed_tests_id = 1;
+    int64 time_taken = 2;
+    bool success = 3;
+    string message = 4;
+    string execution_id = 5;
+    ExecutionMetadata metadata = 6;
+    repeated PipelineStep pipeline_steps = 7;
 }
 
 // Request for execution status
