@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ type ExecutionConfig struct {
 	Language    string
 	SourceCode  string // El código C++ completo generado
 	ExecutionID uuid.UUID
+	TestIDs     []string // IDs de los tests en orden de aparición
 
 	// Resource limits
 	MemoryLimitMB  int64   // Límite de memoria en MB
@@ -110,14 +112,43 @@ func DefaultDockerConfig() *DockerConfig {
 func DefaultExecutionConfig(executionID uuid.UUID, sourceCode string) *ExecutionConfig {
 	dockerConfig := DefaultDockerConfig()
 
+	// Extraer los test IDs del código fuente en orden
+	testIDs := extractTestIDsFromSource(sourceCode)
+
 	return &ExecutionConfig{
 		Language:       "cpp",
 		SourceCode:     sourceCode,
 		ExecutionID:    executionID,
+		TestIDs:        testIDs,
 		MemoryLimitMB:  dockerConfig.DefaultMemoryMB,
 		CPULimit:       dockerConfig.DefaultCPULimit,
 		TimeoutSeconds: int(dockerConfig.DefaultTimeout.Seconds()),
 		ImageName:      dockerConfig.CppImageName,
 		WorkDir:        "/workspace",
 	}
+}
+
+// extractTestIDsFromSource extrae los IDs de los TEST_CASE en orden de aparición
+func extractTestIDsFromSource(sourceCode string) []string {
+	var testIDs []string
+	lines := strings.Split(sourceCode, "\n")
+
+	// Buscar líneas que contengan TEST_CASE("uuid")
+	// Formato: TEST_CASE("3a03b67c-9e38-4a3f-ba0e-a5825e41f2bb") {
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "TEST_CASE(\"") {
+			// Extraer el ID entre las comillas
+			start := strings.Index(line, "\"")
+			if start != -1 {
+				end := strings.Index(line[start+1:], "\"")
+				if end != -1 {
+					testID := line[start+1 : start+1+end]
+					testIDs = append(testIDs, testID)
+				}
+			}
+		}
+	}
+
+	return testIDs
 }

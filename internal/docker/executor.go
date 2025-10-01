@@ -88,17 +88,25 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 		Success:     false,
 	}
 
-	// Crear directorio temporal para el código
-	tempDir, err := os.MkdirTemp("", fmt.Sprintf("coderunner-%s", config.ExecutionID.String()))
+	// Crear directorio local permanente para guardar códigos compilados
+	// Get current working directory to build absolute path
+	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+		return nil, fmt.Errorf("failed to get current directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
 
-	log.Printf("  📁 Temp directory created: %s", tempDir)
+	baseDir := filepath.Join(cwd, "compiled_test_codes")
+	executionDir := filepath.Join(baseDir, config.ExecutionID.String())
+
+	// Crear directorio si no existe
+	if err := os.MkdirAll(executionDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create execution directory: %w", err)
+	}
+
+	log.Printf("  📁 Execution directory created: %s", executionDir)
 
 	// Guardar el código fuente
-	sourceFile := filepath.Join(tempDir, "solution.cpp")
+	sourceFile := filepath.Join(executionDir, "solution.cpp")
 	if err := os.WriteFile(sourceFile, []byte(config.SourceCode), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write source file: %w", err)
 	}
@@ -126,10 +134,10 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 			Memory:   config.MemoryLimitMB * 1024 * 1024, // Convert MB to bytes
 			NanoCPUs: int64(config.CPULimit * 1e9),       // Convert to nano CPUs
 		},
-		NetworkMode:    container.NetworkMode(e.dockerConfig.NetworkMode),
-		ReadonlyRootfs: e.dockerConfig.ReadOnlyRootFS,
+		NetworkMode: container.NetworkMode(e.dockerConfig.NetworkMode),
+		// ReadonlyRootfs disabled to allow compilation temporary files
 		Binds: []string{
-			fmt.Sprintf("%s:%s:ro", tempDir, config.WorkDir),
+			fmt.Sprintf("%s:%s", executionDir, config.WorkDir), // Remove :ro to allow compilation
 		},
 		CapDrop:     e.dockerConfig.DropCapabilities,
 		SecurityOpt: e.dockerConfig.SecurityOpt,
@@ -208,11 +216,39 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 	result.ExecutionTimeMS = time.Since(startTime).Milliseconds()
 	result.Success = (exitCode == 0)
 
-	log.Printf("  📊 Execution completed in %dms", result.ExecutionTimeMS)
-	log.Printf("  📝 Output length: stdout=%d, stderr=%d", len(result.StdOut), len(result.StdErr))
+	log.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("📊 EXECUTION COMPLETED")
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("   ⏱️  Duration: %dms", result.ExecutionTimeMS)
+	log.Printf("   � Exit code: %d", exitCode)
+	log.Printf("   �📝 Stdout length: %d bytes", len(result.StdOut))
+	log.Printf("   📝 Stderr length: %d bytes", len(result.StdErr))
 
-	// Parsear resultados de los tests
-	e.parseTestResults(result)
+	// Mostrar stdout si hay contenido
+	if len(result.StdOut) > 0 {
+		log.Printf("\n📤 STDOUT OUTPUT:")
+		log.Printf("─────────────────────────────────────────────────────")
+		// Mostrar las primeras 1000 caracteres o todo si es más corto
+		stdoutPreview := result.StdOut
+		if len(stdoutPreview) > 1000 {
+			stdoutPreview = stdoutPreview[:1000] + "\n... (truncated, total: " + fmt.Sprintf("%d", len(result.StdOut)) + " bytes)"
+		}
+		log.Printf("%s", stdoutPreview)
+		log.Printf("─────────────────────────────────────────────────────")
+	}
+
+	// Mostrar stderr si hay contenido (siempre importante)
+	if len(result.StdErr) > 0 {
+		log.Printf("\n⚠️  STDERR OUTPUT:")
+		log.Printf("─────────────────────────────────────────────────────")
+		log.Printf("%s", result.StdErr)
+		log.Printf("─────────────────────────────────────────────────────")
+	}
+
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	// Parsear resultados de los tests con la lista ordenada de IDs
+	e.parseTestResults(result, config.TestIDs)
 
 	return result, nil
 }
@@ -355,104 +391,162 @@ func (e *DockerExecutor) Cleanup(ctx context.Context, containerID string) error 
 }
 
 // parseTestResults parsea la salida de doctest para extraer resultados de tests individuales
-func (e *DockerExecutor) parseTestResults(result *ExecutionResult) {
+// Estrategia final:
+// 1. Doctest solo muestra en el output los tests que FALLAN
+// 2. Los que pasan no aparecen en el output
+// 3. Extraer los UUIDs de los tests que aparecen en el output (fallidos)
+// 4. Los tests que NO aparecen = PASARON
+func (e *DockerExecutor) parseTestResults(result *ExecutionResult, testIDs []string) {
 	output := result.StdOut
-
-	// Parsear resultados de doctest
-	// Ejemplo de salida de doctest:
-	// [doctest] doctest version is "2.4.9"
-	// [doctest] run with "--help" for options
-	// ===============================================================================
-	// test_id_123
-	// ===============================================================================
-	// /workspace/solution.cpp:20: PASSED:
-	//   CHECK( fibonacci(1) == 1 )
-	// with expansion:
-	//   1 == 1
-	// ===============================================================================
-	// [doctest] test cases:  3 |  3 passed | 0 failed | 0 skipped
-	// [doctest] assertions: 10 | 10 passed | 0 failed |
-
 	lines := strings.Split(output, "\n")
-	passedTestIDs := make(map[string]bool)
-	failedTestIDs := make(map[string]bool)
-	currentTestID := ""
 
-	for i, line := range lines {
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("🔍 PARSING TEST RESULTS")
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("📋 Expected tests: %d", len(testIDs))
+	log.Printf("📝 Test IDs to validate:")
+	for i, id := range testIDs {
+		log.Printf("   %d. %s", i+1, id)
+	}
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Set de test IDs que aparecen en el output (los que fallaron)
+	failedTestIDs := make(map[string]bool)
+
+	// Variables para parsear estadísticas generales
+	var totalTestCases, passedTestCases, failedTestCases int
+
+	log.Printf("\n🔎 ANALYZING DOCTEST OUTPUT:")
+	log.Printf("─────────────────────────────────────────────────────")
+
+	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
-		// Detectar inicio de un test case (el ID aparece después de una línea de "===")
-		// Buscar patrón: línea con solo "===" seguida de un UUID/ID
-		if strings.HasPrefix(line, "===") && len(line) > 10 {
-			// La siguiente línea debería ser el test ID
-			if i+1 < len(lines) {
-				nextLine := strings.TrimSpace(lines[i+1])
-				// Verificar si parece un UUID o test ID (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-				if len(nextLine) > 0 && !strings.HasPrefix(nextLine, "===") && !strings.HasPrefix(nextLine, "[doctest]") {
-					currentTestID = nextLine
+		// Detectar línea con TEST CASE: <uuid>
+		// Solo aparecen los tests que FALLAN
+		if strings.Contains(line, "TEST CASE:") {
+			// Extraer el UUID
+			parts := strings.Split(line, "TEST CASE:")
+			if len(parts) == 2 {
+				testID := strings.TrimSpace(parts[1])
+				// Verificar que parece un UUID
+				if len(testID) >= 36 && strings.Count(testID, "-") >= 4 {
+					failedTestIDs[testID] = true
+					log.Printf("   ❌ FAILED TEST DETECTED: %s", testID)
 				}
 			}
 		}
 
-		// Detectar si el test pasó o falló
-		if currentTestID != "" {
-			if strings.Contains(line, "PASSED:") || strings.Contains(line, "passed") {
-				passedTestIDs[currentTestID] = true
-			} else if strings.Contains(line, "FAILED:") || strings.Contains(line, "ERROR:") {
-				failedTestIDs[currentTestID] = true
-			}
-		}
-
-		// Buscar línea de test cases para estadísticas generales
+		// Parsear estadísticas generales al final
+		// Formato: "[doctest] test cases:  3 |  3 passed | 0 failed | 0 skipped"
 		if strings.Contains(line, "test cases:") {
-			// Parsear: [doctest] test cases:  3 |  3 passed | 0 failed | 0 skipped
+			log.Printf("\n📊 DOCTEST SUMMARY LINE: %s", line)
 			parts := strings.Split(line, "|")
-			if len(parts) >= 3 {
-				for _, part := range parts {
-					part = strings.TrimSpace(part)
-					if strings.Contains(part, "passed") {
-						fmt.Sscanf(part, "%d passed", &result.PassedTests)
-					} else if strings.Contains(part, "failed") {
-						fmt.Sscanf(part, "%d failed", &result.FailedTests)
-					}
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if strings.Contains(part, "passed") {
+					fmt.Sscanf(part, "%d passed", &passedTestCases)
+				} else if strings.Contains(part, "failed") {
+					fmt.Sscanf(part, "%d failed", &failedTestCases)
 				}
 			}
-		}
-
-		// Buscar línea de assertions para total
-		if strings.Contains(line, "assertions:") {
-			parts := strings.Split(line, "|")
-			if len(parts) >= 1 {
+			// El primer número antes del "|" es el total
+			if len(parts) > 0 {
 				firstPart := strings.TrimSpace(parts[0])
-				if idx := strings.Index(firstPart, "assertions:"); idx != -1 {
-					fmt.Sscanf(firstPart[idx:], "assertions: %d", &result.TotalTests)
+				if idx := strings.LastIndex(firstPart, ":"); idx != -1 {
+					fmt.Sscanf(firstPart[idx+1:], "%d", &totalTestCases)
 				}
 			}
 		}
 	}
 
-	// Construir TestResults basado en los IDs encontrados
-	for testID := range passedTestIDs {
+	log.Printf("─────────────────────────────────────────────────────")
+
+	// Asignar estadísticas generales
+	result.TotalTests = totalTestCases
+	result.PassedTests = passedTestCases
+	result.FailedTests = failedTestCases
+
+	log.Printf("\n📈 EXECUTION STATISTICS:")
+	log.Printf("   Total test cases: %d", totalTestCases)
+	log.Printf("   ✅ Passed: %d", passedTestCases)
+	log.Printf("   ❌ Failed: %d", failedTestCases)
+	log.Printf("   🔍 Failed test IDs found in output: %d", len(failedTestIDs))
+
+	log.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("✅ MATCHING TEST IDs WITH RESULTS:")
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Construir TestResults basándose en si el ID aparece en failedTestIDs
+	// Si NO aparece en el output = PASÓ
+	// Si aparece en el output = FALLÓ
+	passedIDs := []string{}
+	failedIDs := []string{}
+
+	for i, testID := range testIDs {
+		passed := !failedTestIDs[testID] // Si NO está en failed, entonces pasó
 		result.TestResults = append(result.TestResults, TestResult{
 			TestID:   testID,
 			TestName: testID,
-			Passed:   true,
+			Passed:   passed,
 		})
-	}
 
-	for testID := range failedTestIDs {
-		// Solo agregar si no está ya en passed (por si hay conflicto)
-		if !passedTestIDs[testID] {
-			result.TestResults = append(result.TestResults, TestResult{
-				TestID:   testID,
-				TestName: testID,
-				Passed:   false,
-			})
+		if passed {
+			passedIDs = append(passedIDs, testID)
+			log.Printf("   ✅ Test #%d: PASSED", i+1)
+			log.Printf("      ID: %s", testID)
+		} else {
+			failedIDs = append(failedIDs, testID)
+			log.Printf("   ❌ Test #%d: FAILED", i+1)
+			log.Printf("      ID: %s", testID)
 		}
 	}
 
-	log.Printf("  🧪 Test results: %d/%d passed", result.PassedTests, result.TotalTests)
-	log.Printf("  📋 Individual test results: %d passed IDs, %d failed IDs", len(passedTestIDs), len(failedTestIDs))
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Calcular estadísticas
+	passedCount := len(passedIDs)
+	failedCount := len(failedIDs)
+
+	log.Printf("\n🎯 FINAL RESULTS SUMMARY:")
+	log.Printf("   Total: %d tests", len(testIDs))
+	log.Printf("   ✅ Passed: %d tests (%d%%)", passedCount, (passedCount*100)/max(len(testIDs), 1))
+	log.Printf("   ❌ Failed: %d tests (%d%%)", failedCount, (failedCount*100)/max(len(testIDs), 1))
+
+	if passedCount > 0 {
+		log.Printf("\n✅ PASSED TEST IDs:")
+		for i, id := range passedIDs {
+			log.Printf("   %d. %s", i+1, id)
+		}
+	}
+
+	if failedCount > 0 {
+		log.Printf("\n❌ FAILED TEST IDs:")
+		for i, id := range failedIDs {
+			log.Printf("   %d. %s", i+1, id)
+		}
+	}
+
+	// Verificar consistencia con doctest
+	if passedCount != passedTestCases {
+		log.Printf("\n⚠️  WARNING: Mismatch detected!")
+		log.Printf("   Expected passed (from doctest): %d", passedTestCases)
+		log.Printf("   Actual passed (from parsing): %d", passedCount)
+		log.Printf("   Difference: %d", passedTestCases-passedCount)
+	} else {
+		log.Printf("\n✅ Consistency check: PASSED")
+		log.Printf("   Parsed results match doctest summary")
+	}
+
+	log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+}
+
+// max retorna el máximo entre dos enteros
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 } // Close cierra el cliente de Docker
 func (e *DockerExecutor) Close() error {
 	return e.client.Close()
