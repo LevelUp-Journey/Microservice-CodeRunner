@@ -30,8 +30,16 @@ message TestCase {
     string custom_validation_code = 4;
 }
 
-// Response with approved test IDs
+// Response with approved test IDs and execution metrics
 message ExecutionResponse {
     repeated string approved_tests = 1;
     bool completed = 2;
+    int64 execution_time_ms = 3;
+    int32 total_tests = 4;
+    int32 passed_tests = 5;
+    int32 failed_tests = 6;
+    bool success = 7;
+    string message = 8;
+    string error_message = 9;
+    string error_type = 10;
 }
