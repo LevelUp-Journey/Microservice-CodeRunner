@@ -14,19 +14,19 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "code-runner/api/gen/proto"
+	"code-runner/internal/types"
 )
 
 // Simplified service implementation (gRPC adapter only)
-type codeExecutionServiceImpl struct {
-	pb.UnimplementedCodeExecutionServiceServer
+type solutionEvaluationServiceImpl struct {
+	pb.UnimplementedSolutionEvaluationServiceServer
 }
 
-// NewCodeExecutionServiceServer creates a new simplified gRPC service implementation
-func NewCodeExecutionServiceServer() pb.CodeExecutionServiceServer {
-	return &codeExecutionServiceImpl{}
+// NewSolutionEvaluationServiceServer creates a new simplified gRPC service implementation
+func NewSolutionEvaluationServiceServer() pb.SolutionEvaluationServiceServer {
+	return &solutionEvaluationServiceImpl{}
 }
 
 // extractFunctionName extracts the function name from C++ code using regex
@@ -87,53 +87,86 @@ func generateCppFile(solutionCode string, functionName string, testCases []*pb.T
 	return tempFile, nil
 }
 
-// ExecuteCode executes solution code and returns approved test IDs (simplified - no pipeline)
-func (s *codeExecutionServiceImpl) ExecuteCode(ctx context.Context, req *pb.ExecutionRequest) (*pb.ExecutionResponse, error) {
-	// Extract function name from solution code
-	functionName := extractFunctionName(req.Code)
+// evaluateSolution executes solution code and returns approved test IDs
+func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, req *pb.ExecutionRequest) (*pb.ExecutionResponse, error) {
+	log.Printf("🚀 ===== RECEIVED EXECUTION REQUEST =====")
+	log.Printf("  📋 Challenge ID: %s", req.ChallengeId)
+	log.Printf("  🔢 Code Version ID: %s", req.CodeVersionId)
+	log.Printf("  👤 Student ID: %s", req.StudentId)
+	log.Printf("   Code length: %d characters", len(req.Code))
+	log.Printf("  🧪 Test cases: %d", len(req.Tests))
 
-	// Generate C++ file
-	filePath, err := generateCppFile(req.Code, functionName, req.TestCases)
-	if err != nil {
-		log.Printf("Error generating C++ file: %v", err)
-		return &pb.ExecutionResponse{
-			Success: false,
-			Message: fmt.Sprintf("Failed to generate C++ file: %v", err),
-		}, nil
+	// Log the actual code
+	log.Printf("  📄 Code preview:")
+	lines := strings.Split(req.Code, "\n")
+	for i, line := range lines {
+		if i < 5 { // Show first 5 lines
+			log.Printf("    %d: %s", i+1, line)
+		} else if i == 5 {
+			log.Printf("    ... (%d more lines)", len(lines)-5)
+			break
+		}
 	}
 
-	log.Printf("Generated C++ file at: %s", filePath)
+	// Log test cases details
+	log.Printf("  🧪 Test cases details:")
+	for i, tc := range req.Tests {
+		log.Printf("    Test %d: ID='%s', Input='%s', Expected='%s'",
+			i+1, tc.CodeVersionTestId, tc.Input, tc.ExpectedOutput)
+		if tc.CustomValidationCode != "" {
+			log.Printf("      Custom validation: %s", tc.CustomValidationCode)
+		}
+	}
 
-	// Simple response (for now, just indicate file created)
+	startTime := time.Now()
+
+	// Convert proto request to internal types for template generation
+	internalReq := &types.ExecutionRequest{
+		SolutionID:    req.ChallengeId, // Using ChallengeId as SolutionID for now
+		ChallengeID:   req.ChallengeId,
+		CodeVersionID: req.CodeVersionId,
+		StudentID:     req.StudentId,
+		Code:          req.Code,
+		Language:      "cpp", // Hardcoded for now, assuming C++
+		TestCases:     convertTestCases(req.Tests),
+	}
+
+	log.Printf("🔧 Converting to internal types...")
+	log.Printf("  ✅ Internal request created with %d test cases", len(internalReq.TestCases))
+
+	// TODO: Use the template generator here instead of mock response
+	// For now, create a simple response
+	approvedTests := make([]string, len(req.Tests))
+	for i, tc := range req.Tests {
+		approvedTests[i] = tc.CodeVersionTestId
+		log.Printf("  ✅ Approving test: %s", tc.CodeVersionTestId)
+	}
+
+	executionTime := time.Since(startTime)
+
+	log.Printf("✅ ===== EXECUTION COMPLETED =====")
+	log.Printf("  ⏱️  Execution time: %d ms", executionTime.Milliseconds())
+	log.Printf("  📊 Approved tests: %d/%d", len(approvedTests), len(req.Tests))
+
 	return &pb.ExecutionResponse{
-		PassedTestsId: []string{"test1"}, // Mock
-		TimeTaken:     100,
-		Success:       true,
-		Message:       fmt.Sprintf("C++ file generated successfully at %s", filePath),
+		ApprovedTests: approvedTests,
+		Completed:     true,
 	}, nil
 }
 
-// GetExecutionStatus returns the status of an execution (simplified)
-func (s *codeExecutionServiceImpl) GetExecutionStatus(ctx context.Context, req *pb.ExecutionStatusRequest) (*pb.ExecutionStatusResponse, error) {
-	log.Printf("📊 Received status request for execution: %s", req.ExecutionId)
-
-	// Return a simple completed status
-	return &pb.ExecutionStatusResponse{
-		ExecutionId:     req.ExecutionId,
-		Status:          pb.ExecutionStatus_EXECUTION_STATUS_COMPLETED,
-		Message:         "Execution completed successfully (simplified mode)",
-		Success:         true,
-		ApprovedTestIds: []string{"test1", "test2", "test3"},
-	}, nil
-}
-
-// HealthCheck provides a simple health check endpoint
-func (s *codeExecutionServiceImpl) HealthCheck(ctx context.Context, req *pb.HealthCheckRequest) (*pb.HealthCheckResponse, error) {
-	return &pb.HealthCheckResponse{
-		Status:    pb.HealthStatus_HEALTH_STATUS_SERVING,
-		Message:   "gRPC adapter is healthy",
-		Timestamp: timestamppb.New(time.Now()),
-	}, nil
+// convertTestCases converts proto test cases to internal types
+func convertTestCases(protoTests []*pb.TestCase) []*types.TestCase {
+	tests := make([]*types.TestCase, len(protoTests))
+	for i, pt := range protoTests {
+		tests[i] = &types.TestCase{
+			TestID:               pt.CodeVersionTestId, // Using CodeVersionTestId as TestID
+			CodeVersionTestID:    pt.CodeVersionTestId,
+			Input:                pt.Input,
+			ExpectedOutput:       pt.ExpectedOutput,
+			CustomValidationCode: pt.CustomValidationCode,
+		}
+	}
+	return tests
 }
 
 // StartServer starts the gRPC server (simplified version)
@@ -144,14 +177,23 @@ func StartServer(port string) error {
 		return err
 	}
 
-	// Create gRPC server
-	grpcServer := grpc.NewServer()
+	// Configure gRPC server options to match Spring Boot client configuration
+	// - Max inbound message size: 8MB (as configured in Spring Boot)
+	// - Plaintext negotiation (no TLS)
+	maxMsgSize := 8 * 1024 * 1024 // 8MB
+	serverOptions := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(maxMsgSize),
+		grpc.MaxSendMsgSize(maxMsgSize),
+	}
+
+	// Create gRPC server with options
+	grpcServer := grpc.NewServer(serverOptions...)
 
 	// Register service
-	service := NewCodeExecutionServiceServer()
-	pb.RegisterCodeExecutionServiceServer(grpcServer, service)
+	service := NewSolutionEvaluationServiceServer()
+	pb.RegisterSolutionEvaluationServiceServer(grpcServer, service)
 
-	log.Printf("🚀 Starting simplified gRPC server on port %s (adapter only)", port)
+	log.Printf("🚀 Starting gRPC server on port %s (plaintext, max msg size: %dMB)", port, maxMsgSize/(1024*1024))
 
 	// Handle graceful shutdown
 	go func() {
