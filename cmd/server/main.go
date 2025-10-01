@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
 
 	"code-runner/env"
 	"code-runner/internal/database"
+	"code-runner/internal/docker"
 	"code-runner/internal/server"
 )
 
@@ -25,6 +28,21 @@ func main() {
 			log.Printf("Error closing database: %v", err)
 		}
 	}()
+
+	// Initialize Docker executor and verify images
+	log.Printf("🐳 Initializing Docker environment...")
+	dockerExecutor, err := docker.NewDockerExecutor()
+	if err != nil {
+		log.Fatalf("Failed to create Docker executor: %v", err)
+	}
+
+	// Verify and build Docker images if necessary
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	if err := dockerExecutor.EnsureImagesReady(ctx); err != nil {
+		log.Fatalf("Failed to ensure Docker images are ready: %v", err)
+	}
 
 	// Print startup information
 	log.Printf("🚀 Starting %s gRPC Server", config.App.Name)
