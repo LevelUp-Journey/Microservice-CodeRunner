@@ -1,14 +1,18 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -19,6 +23,7 @@ type Executor interface {
 	Execute(ctx context.Context, config *ExecutionConfig) (*ExecutionResult, error)
 	BuildImage(ctx context.Context, language string) error
 	Cleanup(ctx context.Context, containerID string) error
+	EnsureImagesReady(ctx context.Context) error
 }
 
 // DockerExecutor implementa Executor usando Docker
@@ -38,6 +43,38 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		client:       cli,
 		dockerConfig: DefaultDockerConfig(),
 	}, nil
+}
+
+// EnsureImagesReady verifica que todas las imágenes necesarias existen y las construye si faltan
+func (e *DockerExecutor) EnsureImagesReady(ctx context.Context) error {
+	log.Printf("🔍 Checking Docker images...")
+
+	// Lista de imágenes necesarias con sus lenguajes
+	images := map[string]string{
+		e.dockerConfig.CppImageName: "cpp",
+	}
+
+	for imageName, language := range images {
+		// Verificar si la imagen existe
+		_, _, err := e.client.ImageInspectWithRaw(ctx, imageName)
+		if err != nil {
+			if client.IsErrNotFound(err) {
+				log.Printf("  ⚠️  Image %s not found, building...", imageName)
+				// Construir la imagen
+				if err := e.BuildImage(ctx, language); err != nil {
+					return fmt.Errorf("failed to build image %s: %w", imageName, err)
+				}
+				log.Printf("  ✅ Image %s ready", imageName)
+			} else {
+				return fmt.Errorf("failed to inspect image %s: %w", imageName, err)
+			}
+		} else {
+			log.Printf("  ✅ Image %s found", imageName)
+		}
+	}
+
+	log.Printf("✅ All Docker images are ready")
+	return nil
 }
 
 // Execute ejecuta el código en un contenedor Docker
@@ -198,9 +235,104 @@ func (e *DockerExecutor) ensureImage(ctx context.Context, imageName string) erro
 func (e *DockerExecutor) BuildImage(ctx context.Context, language string) error {
 	log.Printf("🔨 Building Docker image for %s...", language)
 
-	// Por ahora, retornamos un error indicando que la imagen debe ser construida manualmente
-	return fmt.Errorf("image must be built manually. Run: docker build -t %s ./docker/%s/",
-		e.dockerConfig.CppImageName, language)
+	imageName := e.dockerConfig.CppImageName
+	dockerfilePath := fmt.Sprintf("./docker/%s/Dockerfile", language)
+
+	// Verificar si el Dockerfile existe
+	if _, err := os.Stat(dockerfilePath); os.IsNotExist(err) {
+		return fmt.Errorf("Dockerfile not found at %s", dockerfilePath)
+	}
+
+	// Crear tar del contexto de build
+	buildContext := filepath.Join("./docker/", language)
+	tarBuf, err := createTarFromDirectory(buildContext)
+	if err != nil {
+		return fmt.Errorf("failed to create tar from directory: %w", err)
+	}
+
+	// Opciones de build
+	buildOptions := types.ImageBuildOptions{
+		Tags:        []string{imageName},
+		Dockerfile:  "Dockerfile",
+		Remove:      true,
+		ForceRemove: true,
+		PullParent:  true,
+	}
+
+	// Construir la imagen
+	log.Printf("  📦 Building image %s from %s...", imageName, buildContext)
+	log.Printf("  ⏳ This may take a few minutes on first build...")
+	buildResp, err := e.client.ImageBuild(ctx, tarBuf, buildOptions)
+	if err != nil {
+		return fmt.Errorf("failed to build image: %w", err)
+	}
+	defer buildResp.Body.Close()
+
+	// Leer la salida del build
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, buildResp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read build output: %w", err)
+	}
+
+	// Verificar si hubo errores en el build
+	output := buf.String()
+	if strings.Contains(strings.ToLower(output), "error") {
+		log.Printf("  ❌ Build output:\n%s", output)
+		return fmt.Errorf("build failed, check output above")
+	}
+
+	log.Printf("  ✅ Image %s built successfully", imageName)
+	return nil
+}
+
+// createTarFromDirectory crea un archivo tar desde un directorio
+func createTarFromDirectory(dir string) (io.Reader, error) {
+	buf := new(bytes.Buffer)
+	tw := tar.NewWriter(buf)
+	defer tw.Close()
+
+	err := filepath.Walk(dir, func(file string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Crear header del tar
+		header, err := tar.FileInfoHeader(fi, fi.Name())
+		if err != nil {
+			return err
+		}
+
+		// Actualizar el nombre para ser relativo al directorio
+		relPath, err := filepath.Rel(dir, file)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		// Escribir header
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// Si es un archivo regular, escribir contenido
+		if !fi.IsDir() {
+			data, err := os.ReadFile(file)
+			if err != nil {
+				return err
+			}
+			if _, err := tw.Write(data); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
 }
 
 // Cleanup limpia recursos del contenedor

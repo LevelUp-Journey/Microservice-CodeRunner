@@ -176,11 +176,9 @@ func (g *CppTemplateGenerator) hasCustomValidation(tests []*types.TestCase) bool
 func (g *CppTemplateGenerator) buildTemplate(solutionCode, testCode string) string {
 	template := `// Start Test
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-// Solution - Start
 #include "doctest.h"
-#include <iostream>
-using namespace std;
 
+// Solution - Start
 %s
 // Solution - End
 
