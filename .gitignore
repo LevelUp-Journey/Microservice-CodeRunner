@@ -31,3 +31,6 @@ Thumbs.db
 
 # Variables de entorno locales
 .env
+
+# Códigos compilados de tests
+/compiled_test_codes/
