@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package com.levelupjourney.coderunner;
+
+option go_package = "code-runner/api/gen/proto";
+option java_multiple_files = true;
+option java_package = "com.levelupjourney.microservicechallenges.solutions.interfaces.grpc";
+option java_outer_classname = "CodeExecutionProto";
+
+// Service for code execution - communicates with CodeRunner microservice (Go)
+service SolutionEvaluationService {
+    // Execute solution code and return approved test IDs
+    rpc EvaluateSolution (ExecutionRequest) returns (ExecutionResponse);
+}
+
+// Request for code execution from Spring Boot
+message ExecutionRequest {
+    string challenge_id = 1;
+    string code_version_id = 2;
+    string student_id = 3;
+    string code = 4;
+    repeated TestCase tests = 5;
+}
+
+// Test case definition
+message TestCase {
+    string code_version_test_id = 1;
+    string input = 2;
+    string expected_output = 3;
+    string custom_validation_code = 4;
+}
+
+// Response with approved test IDs and execution metrics
+message ExecutionResponse {
+    repeated string approved_tests = 1;
+    bool completed = 2;
+    int64 execution_time_ms = 3;
+    int32 total_tests = 4;
+    int32 passed_tests = 5;
+    int32 failed_tests = 6;
+    bool success = 7;
+    string message = 8;
+    string error_message = 9;
+    string error_type = 10;
+}
