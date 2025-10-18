@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -98,17 +99,33 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 	baseDir := filepath.Join(cwd, "compiled_test_codes")
 	executionDir := filepath.Join(baseDir, config.ExecutionID.String())
 
-	// Crear directorio si no existe
-	if err := os.MkdirAll(executionDir, 0755); err != nil {
+	// Crear directorio si no existe con permisos de escritura para todos
+	if err := os.MkdirAll(executionDir, 0777); err != nil {
 		return nil, fmt.Errorf("failed to create execution directory: %w", err)
+	}
+
+	// Cambiar propietario del directorio a UID 1000 (usuario coderunner en contenedor)
+	// Solo en Linux/macOS - Windows no soporta chown
+	if runtime.GOOS != "windows" {
+		if err := os.Chown(executionDir, 1000, 1000); err != nil {
+			log.Printf("  ⚠️  Warning: failed to chown directory: %v", err)
+		}
 	}
 
 	log.Printf("  📁 Execution directory created: %s", executionDir)
 
 	// Guardar el código fuente
 	sourceFile := filepath.Join(executionDir, "solution.cpp")
-	if err := os.WriteFile(sourceFile, []byte(config.SourceCode), 0644); err != nil {
+	if err := os.WriteFile(sourceFile, []byte(config.SourceCode), 0666); err != nil {
 		return nil, fmt.Errorf("failed to write source file: %w", err)
+	}
+
+	// Cambiar propietario del archivo también
+	// Solo en Linux/macOS - Windows no soporta chown
+	if runtime.GOOS != "windows" {
+		if err := os.Chown(sourceFile, 1000, 1000); err != nil {
+			log.Printf("  ⚠️  Warning: failed to chown source file: %v", err)
+		}
 	}
 
 	log.Printf("  💾 Source code saved: %s (%d bytes)", sourceFile, len(config.SourceCode))
