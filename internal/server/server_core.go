@@ -13,7 +13,7 @@ import (
 	pb "code-runner/api/gen/proto"
 	"code-runner/internal/database/repository"
 	"code-runner/internal/docker"
-	"code-runner/internal/template"
+	template "code-runner/internal/template/cpp"
 )
 
 // solutionEvaluationServiceImpl implementa el servicio gRPC
