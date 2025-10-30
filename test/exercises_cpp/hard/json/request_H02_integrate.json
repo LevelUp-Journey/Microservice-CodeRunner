@@ -1,0 +1,20 @@
+{
+  "challenge_id": "660e8400-e29b-41d4-a716-446655440045",
+  "code_version_id": "660e8400-e29b-41d4-a716-446655440046",
+  "student_id": "660e8400-e29b-41d4-a716-446655440047",
+  "code": "#include <cmath>\n\ndouble integrate(double a, double b, int n) {\n    double h = (b - a) / n;\n    double sum = 0.5 * (a*a + b*b);\n    for (int i = 1; i < n; i++) {\n        double x = a + i * h;\n        sum += x * x;\n    }\n    return sum * h;\n}",
+  "tests": [
+    {
+      "code_version_test_id": "660e8400-e29b-41d4-a716-446655440048",
+      "input": "0.0,1.0,10",
+      "expected_output": "0.333333",
+      "custom_validation_code": "    double result = integrate(0.0, 1.0, 10);\n    CHECK(abs(result - 0.333333) < 1e-3);"
+    },
+    {
+      "code_version_test_id": "660e8400-e29b-41d4-a716-446655440049",
+      "input": "0.0,1.0,100",
+      "expected_output": "0.333333",
+      "custom_validation_code": "    double result = integrate(0.0, 1.0, 100);\n    CHECK(abs(result - 0.333333) < 1e-4);"
+    }
+  ]
+}
