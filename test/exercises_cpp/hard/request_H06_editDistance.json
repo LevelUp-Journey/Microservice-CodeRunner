@@ -1,0 +1,40 @@
+{
+  "solution_id": "550e8400-e29b-41d4-a716-446655440071",
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440072",
+  "code_version_id": "550e8400-e29b-41d4-a716-446655440073",
+  "student_id": "550e8400-e29b-41d4-a716-446655440074",
+  "code": "#include <string>\n#include <vector>\n#include <algorithm>\n\nint minDistance(const std::string& word1, const std::string& word2) {\n    int m = word1.size();\n    int n = word2.size();\n\n    std::vector<std::vector<int>> dp(m + 1, std::vector<int>(n + 1, 0));\n\n    // Initialize base cases\n    for (int i = 0; i <= m; ++i) {\n        dp[i][0] = i;\n    }\n    for (int j = 0; j <= n; ++j) {\n        dp[0][j] = j;\n    }\n\n    // Fill the dp table\n    for (int i = 1; i <= m; ++i) {\n        for (int j = 1; j <= n; ++j) {\n            if (word1[i - 1] == word2[j - 1]) {\n                dp[i][j] = dp[i - 1][j - 1];\n            } else {\n                dp[i][j] = std::min({\n                    dp[i - 1][j] + 1,     // deletion\n                    dp[i][j - 1] + 1,     // insertion\n                    dp[i - 1][j - 1] + 1  // substitution\n                });\n            }\n        }\n    }\n\n    return dp[m][n];\n}",
+  "language": "cpp",
+  "test_cases": [
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440075",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440076",
+      "input": "\"horse\" \"ros\"",
+      "expected_output": "3"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440077",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440078",
+      "input": "\"intention\" \"execution\"",
+      "expected_output": "5"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440079",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440080",
+      "input": "\"\" \"\"",
+      "expected_output": "0"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440081",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440082",
+      "input": "\"a\" \"ab\"",
+      "expected_output": "1"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440083",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440084",
+      "input": "\"plasma\" \"altruism\"",
+      "expected_output": "6"
+    }
+  ]
+}

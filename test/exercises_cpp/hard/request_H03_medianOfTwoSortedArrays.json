@@ -1,0 +1,40 @@
+{
+  "solution_id": "550e8400-e29b-41d4-a716-446655440029",
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440030",
+  "code_version_id": "550e8400-e29b-41d4-a716-446655440031",
+  "student_id": "550e8400-e29b-41d4-a716-446655440032",
+  "code": "#include <vector>\n#include <algorithm>\n#include <limits>\n\ndouble findMedianSortedArrays(const std::vector<int>& nums1, const std::vector<int>& nums2) {\n    if (nums1.size() > nums2.size()) {\n        return findMedianSortedArrays(nums2, nums1);\n    }\n\n    int m = nums1.size();\n    int n = nums2.size();\n    int total = m + n;\n    int half = (total + 1) / 2;\n\n    int left = 0;\n    int right = m;\n\n    while (left <= right) {\n        int i = left + (right - left) / 2;\n        int j = half - i;\n\n        int nums1_left = (i > 0) ? nums1[i - 1] : std::numeric_limits<int>::min();\n        int nums1_right = (i < m) ? nums1[i] : std::numeric_limits<int>::max();\n        int nums2_left = (j > 0) ? nums2[j - 1] : std::numeric_limits<int>::min();\n        int nums2_right = (j < n) ? nums2[j] : std::numeric_limits<int>::max();\n\n        if (nums1_left <= nums2_right && nums2_left <= nums1_right) {\n            if (total % 2 == 1) {\n                return std::max(nums1_left, nums2_left);\n            } else {\n                return (std::max(nums1_left, nums2_left) + std::min(nums1_right, nums2_right)) / 2.0;\n            }\n        } else if (nums1_left > nums2_right) {\n            right = i - 1;\n        } else {\n            left = i + 1;\n        }\n    }\n\n    return 0.0;\n}",
+  "language": "cpp",
+  "test_cases": [
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440033",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440034",
+      "input": "[1,3] [2]",
+      "expected_output": "2.00000"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440035",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440036",
+      "input": "[1,2] [3,4]",
+      "expected_output": "2.50000"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440037",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440038",
+      "input": "[0,0] [0,0]",
+      "expected_output": "0.00000"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440039",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440040",
+      "input": "[] [1]",
+      "expected_output": "1.00000"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440041",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440042",
+      "input": "[2] []",
+      "expected_output": "2.00000"
+    }
+  ]
+}
