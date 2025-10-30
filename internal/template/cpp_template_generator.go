@@ -62,9 +62,15 @@ func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest, exe
 
 // extractFunctionName usa regex para encontrar el nombre de la función principal
 func (g *CppTemplateGenerator) extractFunctionName(code string) (string, error) {
-	// Regex para encontrar funciones en C++: tipo_retorno nombre_funcion(parametros)
-	// Captura el nombre de la función (grupo 2)
-	re := regexp.MustCompile(`(?m)^\s*(?:int|void|double|float|char|string|bool)\s+(\w+)\s*\([^)]*\)\s*\{`)
+	// Regex mejorada para encontrar funciones en C++
+	// Soporta: tipos básicos, punteros (*), referencias (&), const, unsigned, etc.
+	// Ejemplos que coinciden:
+	//   - int add(int a, int b)
+	//   - char* getName()
+	//   - const char* getValue()
+	//   - unsigned int count()
+	//   - vector<int> getNumbers()
+	re := regexp.MustCompile(`(?m)^\s*(?:const\s+)?(?:unsigned\s+)?(?:int|void|double|float|char|string|bool|auto|long|short|size_t|vector<[^>]+>|std::string)(?:\s*\*|\s*&)?\s+(\w+)\s*\([^)]*\)\s*\{`)
 	matches := re.FindStringSubmatch(code)
 
 	if len(matches) < 2 {
@@ -135,17 +141,32 @@ func (g *CppTemplateGenerator) parseComplexInput(input string, functionName stri
 				arrayContent := part[1 : len(part)-1] // Remover [ y ]
 				arrayVarName := fmt.Sprintf("arr%d", testIndex)
 
-				// Generar declaración del array
-				setupLines = append(setupLines, fmt.Sprintf("    int %s[] = {%s};", arrayVarName, arrayContent))
+				// Detectar el tipo de array (números o strings)
+				isStringArray := strings.Contains(arrayContent, "\"")
 
-				// Calcular tamaño del array
-				elements := strings.Split(arrayContent, ",")
-				arraySize := len(elements)
+				if isStringArray {
+					// Array de strings: ["flower","flow","flight"]
+					// Contar elementos respetando las comillas
+					arraySize := g.countArrayElements(arrayContent)
 
-				// Agregar array como argumento
-				args = append(args, arrayVarName)
-				// Agregar tamaño como siguiente argumento
-				args = append(args, fmt.Sprintf("%d", arraySize))
+					// Generar declaración de array de char*
+					setupLines = append(setupLines, fmt.Sprintf("    char* %s[] = {%s};", arrayVarName, arrayContent))
+
+					// Agregar array y tamaño como argumentos
+					args = append(args, arrayVarName)
+					args = append(args, fmt.Sprintf("%d", arraySize))
+				} else {
+					// Array de números: [1,2,3]
+					elements := strings.Split(arrayContent, ",")
+					arraySize := len(elements)
+
+					// Generar declaración de array de int
+					setupLines = append(setupLines, fmt.Sprintf("    int %s[] = {%s};", arrayVarName, arrayContent))
+
+					// Agregar array y tamaño como argumentos
+					args = append(args, arrayVarName)
+					args = append(args, fmt.Sprintf("%d", arraySize))
+				}
 			} else {
 				// Es un parámetro simple
 				args = append(args, g.formatSimpleParameter(part))
@@ -201,6 +222,24 @@ func (g *CppTemplateGenerator) splitInputParameters(input string) []string {
 	}
 
 	return parts
+}
+
+// countArrayElements cuenta elementos en un array respetando comillas
+// Ejemplo: "flower","flow","flight" -> 3
+func (g *CppTemplateGenerator) countArrayElements(arrayContent string) int {
+	count := 0
+	inQuotes := false
+
+	for _, char := range arrayContent {
+		if char == '"' {
+			inQuotes = !inQuotes
+			if !inQuotes {
+				count++
+			}
+		}
+	}
+
+	return count
 }
 
 // formatSimpleParameter formatea un parámetro simple (no array)

@@ -88,9 +88,20 @@ func (s *solutionEvaluationServiceImpl) processResults(execution *models.Executi
 		execution.Status = models.StatusTimedOut
 		execution.ErrorType = "timeout"
 		execution.ErrorMessage = fmt.Sprintf("Execution timed out after %d seconds", dockerResult.ExecutionTimeMS/1000)
+		execution.Message = "Execution timed out"
 	} else {
-		execution.ErrorType = "test_failure"
+		// Use error type from dockerResult (compilation_error, runtime_error, etc.)
+		execution.ErrorType = dockerResult.ErrorType
 		execution.ErrorMessage = dockerResult.ErrorMessage
+
+		// Set appropriate message based on error type
+		if dockerResult.ErrorType == "compilation_error" {
+			execution.Message = "Compilation failed"
+		} else if dockerResult.ErrorType == "runtime_error" {
+			execution.Message = "Runtime error occurred"
+		} else {
+			execution.Message = fmt.Sprintf("Execution failed: %d/%d tests passed", dockerResult.PassedTests, dockerResult.TotalTests)
+		}
 	}
 
 	execution.SetApprovedTestIDs(approvedIDs)
