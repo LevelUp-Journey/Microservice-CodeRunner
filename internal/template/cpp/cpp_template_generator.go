@@ -27,14 +27,14 @@ func NewCppTemplateGenerator(repo *repository.GeneratedTestCodeRepository) *CppT
 func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest, executionID uuid.UUID) (*models.GeneratedTestCode, error) {
 	startTime := time.Now()
 
-	// Extraer nombre de función usando regex
-	functionName, err := g.extractFunctionName(req.Code)
+	// Extraer nombre de función y tipo de retorno usando regex
+	functionName, returnType, err := g.extractFunctionInfo(req.Code)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting function name: %w", err)
 	}
 
 	// Generar código de tests
-	testCode, testCount := g.generateTestCode(req.TestCases, functionName)
+	testCode, testCount := g.generateTestCode(req.TestCases, functionName, returnType)
 
 	// Crear template completo
 	template := g.buildTemplate(req.Code, testCode)
@@ -60,30 +60,42 @@ func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest, exe
 	return record, nil
 }
 
-// extractFunctionName usa regex para encontrar el nombre de la función principal
-func (g *CppTemplateGenerator) extractFunctionName(code string) (string, error) {
-	// Regex mejorada para encontrar funciones en C++
-	// Soporta: tipos básicos, punteros (*), referencias (&), const, unsigned, etc.
-	// Ejemplos que coinciden:
-	//   - int add(int a, int b)
-	//   - char* getName()
-	//   - const char* getValue()
-	//   - unsigned int count()
-	//   - vector<int> getNumbers()
-	re := regexp.MustCompile(`(?m)^\s*(?:const\s+)?(?:unsigned\s+)?(?:int|void|double|float|char|string|bool|auto|long|short|size_t|vector<[^>]+>|std::string)(?:\s*\*|\s*&)?\s+(\w+)\s*\([^)]*\)\s*\{`)
+// extractFunctionInfo extrae el nombre y tipo de retorno de la función principal
+func (g *CppTemplateGenerator) extractFunctionInfo(code string) (string, string, error) {
+	// Regex mejorada para capturar tipo de retorno y nombre de función
+	// Soporta:
+	//   - Tipos básicos: int, char, double, float, etc.
+	//   - Tipos stdint: int64_t, uint32_t, size_t, etc.
+	//   - Tipos STL: vector<T>, std::string, etc.
+	//   - Modificadores: const, unsigned, *, &
+	// Grupo 1: tipo completo
+	// Grupo 2: nombre de la función
+	re := regexp.MustCompile(`(?m)^\s*((?:const\s+)?(?:unsigned\s+)?(?:int|void|double|float|char|string|bool|auto|long|short|size_t|int8_t|int16_t|int32_t|int64_t|uint8_t|uint16_t|uint32_t|uint64_t|vector<[^>]+>|std::string|std::vector<[^>]+>)(?:\s*\*|\s*&)?)\s+(\w+)\s*\([^)]*\)\s*\{`)
 	matches := re.FindStringSubmatch(code)
 
-	if len(matches) < 2 {
-		return "", fmt.Errorf("no se encontró una función válida en el código")
+	if len(matches) < 3 {
+		return "", "", fmt.Errorf("no se encontró una función válida en el código")
 	}
 
-	return matches[1], nil
+	returnType := strings.TrimSpace(matches[1])
+	functionName := matches[2]
+
+	return functionName, returnType, nil
+}
+
+// extractFunctionName usa regex para encontrar el nombre de la función principal (backward compatibility)
+func (g *CppTemplateGenerator) extractFunctionName(code string) (string, error) {
+	name, _, err := g.extractFunctionInfo(code)
+	return name, err
 }
 
 // generateTestCode genera el código de tests basado en los test cases
-func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functionName string) (string, int) {
+func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functionName string, returnType string) (string, int) {
 	var testLines []string
 	testCount := 0
+
+	// Detectar si el tipo de retorno es char* o const char* (punteros a string)
+	isStringReturn := strings.Contains(returnType, "char") && strings.Contains(returnType, "*")
 
 	for i, test := range tests {
 		testCount++
@@ -109,7 +121,13 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 				if setupCode != "" {
 					testLines = append(testLines, setupCode)
 				}
-				testLines = append(testLines, fmt.Sprintf("    CHECK(%s == %s);", functionCall, expected))
+
+				// Si retorna char*, usar strcmp para comparar strings
+				if isStringReturn && strings.HasPrefix(expected, "\"") {
+					testLines = append(testLines, fmt.Sprintf("    CHECK(strcmp(%s, %s) == 0);", functionCall, expected))
+				} else {
+					testLines = append(testLines, fmt.Sprintf("    CHECK(%s == %s);", functionCall, expected))
+				}
 			}
 			testLines = append(testLines, "}")
 		}
@@ -338,6 +356,7 @@ func (g *CppTemplateGenerator) buildTemplate(solutionCode, testCode string) stri
 	template := `// Start Test
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
+#include <cstring>
 
 // Solution - Start
 %s
