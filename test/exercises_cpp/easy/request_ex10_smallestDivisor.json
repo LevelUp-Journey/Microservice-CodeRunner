@@ -1,0 +1,23 @@
+{
+  "challenge_id": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "code": "int smallestDivisor(int n) {\n    if (n % 2 == 0) return 2;\n    for (int i = 3; (long long)i * i \u003c= n; i += 2) {\n        if (n % i == 0) return i;\n    }\n    return n;\n}",
+  "code_version_id": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "student_id": "c032e274-276e-44c8-a672-89d184ee1463",
+  "tests": [
+    {
+      "code_version_test_id": "94fd9806-5b7e-4047-9974-12abf81b5679",
+      "expected_output": "2",
+      "input": "2"
+    },
+    {
+      "code_version_test_id": "68474c8a-cf37-4cd1-8b39-49b83dbee3af",
+      "expected_output": "3",
+      "input": "15"
+    },
+    {
+      "code_version_test_id": "949a8891-06c5-481a-8b92-e8122ec50c4d",
+      "expected_output": "17",
+      "input": "17"
+    }
+  ]
+}
