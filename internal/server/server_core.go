@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"gorm.io/gorm"
 
 	pb "code-runner/api/gen/proto"
@@ -71,6 +72,10 @@ func StartServer(port string, db *gorm.DB) error {
 	service := NewSolutionEvaluationServiceServer(db)
 	pb.RegisterSolutionEvaluationServiceServer(grpcServer, service)
 	log.Printf("✅ Service registered")
+
+	// Register reflection so tools (grpcurl, BloomRPC, Bruno) can discover services/methods
+	reflection.Register(grpcServer)
+	log.Printf("✅ gRPC reflection registered")
 
 	// Handle graceful shutdown
 	go func() {
