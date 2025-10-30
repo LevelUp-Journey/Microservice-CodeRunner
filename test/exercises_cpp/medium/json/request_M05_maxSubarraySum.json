@@ -1,0 +1,23 @@
+{
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440027",
+  "code_version_id": "550e8400-e29b-41d4-a716-446655440028",
+  "student_id": "550e8400-e29b-41d4-a716-446655440029",
+  "code": "int maxSubarraySum(int nums[], int size) {\n    if (size == 0) return 0;\n\n    int maxSum = nums[0];\n    int currentSum = nums[0];\n\n    for (int i = 1; i < size; i++) {\n        currentSum = (nums[i] > currentSum + nums[i]) ? nums[i] : currentSum + nums[i];\n        maxSum = (currentSum > maxSum) ? currentSum : maxSum;\n    }\n\n    return maxSum;\n}",
+  "tests": [
+    {
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440030",
+      "input": "[-2,1,-3,4,-1,2,1,-5,4]",
+      "expected_output": "6"
+    },
+    {
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440031",
+      "input": "[1]",
+      "expected_output": "1"
+    },
+    {
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440032",
+      "input": "[5,4,-1,7,8]",
+      "expected_output": "23"
+    }
+  ]
+}
