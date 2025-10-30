@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"code-runner/internal/types"
+
+	"github.com/google/uuid"
 )
 
 // GeneratedTestCode represents the generated test code
@@ -16,7 +18,7 @@ type GeneratedTestCode struct {
 	Language            string
 	GeneratorType       string
 	TestCode            string
-	ChallengeID         string
+	ChallengeID         uuid.UUID
 	TestCasesCount      int
 	HasCustomValidation bool
 	GenerationTimeMS    int64
@@ -106,16 +108,16 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 	for _, test := range tests {
 		testCount++
 		testID := test.TestID
-		if testID == "" {
-			testID = fmt.Sprintf("test_%d", testCount)
+		if testID == uuid.Nil {
+			testID = uuid.New()
 		}
 
 		if test.HasCustomValidation() {
-			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID))
+			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID.String()))
 			testLines = append(testLines, test.CustomValidationCode)
 			testLines = append(testLines, "}")
 		} else {
-			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID))
+			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID.String()))
 			if test.Input != "" && test.ExpectedOutput != "" {
 				input := g.formatInput(test.Input)
 				expected := g.formatExpectedOutput(test.ExpectedOutput)
@@ -203,10 +205,11 @@ func main() {
 
 	// Example ExecutionRequest (simulating proto data)
 	req := &types.ExecutionRequest{
-		SolutionID:  "solution_123",
-		ChallengeID: "challenge_456",
-		StudentID:   "student_789",
-		Language:    "c_plus_plus",
+		SolutionID:    uuid.New(),
+		ChallengeID:   uuid.New(),
+		CodeVersionID: uuid.New(),
+		StudentID:     uuid.New(),
+		Language:      "c_plus_plus",
 		Code: `int fibonacci(int n) {
     if (n < 0) throw std::invalid_argument("n debe ser >= 0");
     if (n == 0) return 0;
@@ -215,22 +218,26 @@ func main() {
 }`,
 		TestCases: []*types.TestCase{
 			{
-				TestID:         "test_1",
-				Input:          "0",
-				ExpectedOutput: "0",
+				TestID:            uuid.New(),
+				CodeVersionTestID: uuid.New(),
+				Input:             "0",
+				ExpectedOutput:    "0",
 			},
 			{
-				TestID:         "test_2",
-				Input:          "1",
-				ExpectedOutput: "1",
+				TestID:            uuid.New(),
+				CodeVersionTestID: uuid.New(),
+				Input:             "1",
+				ExpectedOutput:    "1",
 			},
 			{
-				TestID:         "test_3",
-				Input:          "5",
-				ExpectedOutput: "5",
+				TestID:            uuid.New(),
+				CodeVersionTestID: uuid.New(),
+				Input:             "5",
+				ExpectedOutput:    "5",
 			},
 			{
-				TestID: "test_custom",
+				TestID:            uuid.New(),
+				CodeVersionTestID: uuid.New(),
 				CustomValidationCode: `    // Custom validation for fibonacci
     CHECK(fibonacci(2) == 1);
     CHECK(fibonacci(3) == 2);
