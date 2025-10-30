@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
 
@@ -146,11 +147,29 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 	startTime := time.Now()
 
 	// Convert proto request to internal types for template generation
+	challengeID, err := uuid.Parse(req.ChallengeId)
+	if err != nil {
+		log.Printf("❌ Invalid ChallengeId format: %s", req.ChallengeId)
+		return nil, fmt.Errorf("invalid challenge ID format: %w", err)
+	}
+	
+	codeVersionID, err := uuid.Parse(req.CodeVersionId)
+	if err != nil {
+		log.Printf("❌ Invalid CodeVersionId format: %s", req.CodeVersionId)
+		return nil, fmt.Errorf("invalid code version ID format: %w", err)
+	}
+	
+	studentID, err := uuid.Parse(req.StudentId)
+	if err != nil {
+		log.Printf("❌ Invalid StudentId format: %s", req.StudentId)
+		return nil, fmt.Errorf("invalid student ID format: %w", err)
+	}
+
 	internalReq := &types.ExecutionRequest{
-		SolutionID:    req.ChallengeId, // Using ChallengeId as SolutionID for now
-		ChallengeID:   req.ChallengeId,
-		CodeVersionID: req.CodeVersionId,
-		StudentID:     req.StudentId,
+		SolutionID:    challengeID, // Using ChallengeId as SolutionID for now
+		ChallengeID:   challengeID,
+		CodeVersionID: codeVersionID,
+		StudentID:     studentID,
 		Code:          req.Code,
 		Language:      "cpp", // Hardcoded for now, assuming C++
 		TestCases:     convertTestCases(req.Tests),
@@ -162,9 +181,9 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 	// Create execution record
 	log.Printf("📝 Creating execution record...")
 	execution := &models.Execution{
-		SolutionID:  internalReq.SolutionID,
-		ChallengeID: internalReq.ChallengeID,
-		StudentID:   internalReq.StudentID,
+		SolutionID:  internalReq.SolutionID.String(),
+		ChallengeID: internalReq.ChallengeID.String(),
+		StudentID:   internalReq.StudentID.String(),
 		Language:    internalReq.Language,
 		Code:        internalReq.Code,
 		Status:      models.StatusRunning,
@@ -250,11 +269,11 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 				}
 			}
 			log.Printf("  📋 Parsed test results: %d approved, %d failed", len(approvedIDs), len(failedIDs))
-		} else if dockerResult.Success && dockerResult.PassedTests == len(internalReq.TestCases) {
+		if dockerResult.Success && dockerResult.PassedTests == len(internalReq.TestCases) {
 			// Si todos pasaron pero no hay resultados individuales, aprobar todos
 			log.Printf("  ℹ️  All tests passed, approving all test IDs")
 			for _, tc := range internalReq.TestCases {
-				approvedIDs = append(approvedIDs, tc.TestID)
+				approvedIDs = append(approvedIDs, tc.TestID.String())
 			}
 		}
 
@@ -298,7 +317,7 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 		// Convert test IDs to comma-separated string
 		approvedIDs := make([]string, len(internalReq.TestCases))
 		for i, tc := range internalReq.TestCases {
-			approvedIDs[i] = tc.TestID
+			approvedIDs[i] = tc.TestID.String()
 		}
 		execution.SetApprovedTestIDs(approvedIDs)
 		execution.PassedTests = len(internalReq.TestCases)
@@ -356,9 +375,21 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 func convertTestCases(protoTests []*pb.TestCase) []*types.TestCase {
 	tests := make([]*types.TestCase, len(protoTests))
 	for i, pt := range protoTests {
+		testID, err := uuid.Parse(pt.CodeVersionTestId)
+		if err != nil {
+			log.Printf("⚠️  Invalid test ID format: %s, using new UUID", pt.CodeVersionTestId)
+			testID = uuid.New()
+		}
+		
+		codeVersionTestID, err := uuid.Parse(pt.CodeVersionTestId)
+		if err != nil {
+			log.Printf("⚠️  Invalid code version test ID format: %s, using same as testID", pt.CodeVersionTestId)
+			codeVersionTestID = testID
+		}
+		
 		tests[i] = &types.TestCase{
-			TestID:               pt.CodeVersionTestId, // Using CodeVersionTestId as TestID
-			CodeVersionTestID:    pt.CodeVersionTestId,
+			TestID:               testID,
+			CodeVersionTestID:    codeVersionTestID,
 			Input:                pt.Input,
 			ExpectedOutput:       pt.ExpectedOutput,
 			CustomValidationCode: pt.CustomValidationCode,

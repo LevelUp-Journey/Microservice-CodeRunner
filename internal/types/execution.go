@@ -1,13 +1,17 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // ExecutionRequest representa la solicitud de ejecución de código
 type ExecutionRequest struct {
-	SolutionID    string           `json:"solution_id"`
-	ChallengeID   string           `json:"challenge_id"`
-	CodeVersionID string           `json:"code_version_id"`
-	StudentID     string           `json:"student_id"`
+	SolutionID    uuid.UUID        `json:"solution_id"`
+	ChallengeID   uuid.UUID        `json:"challenge_id"`
+	CodeVersionID uuid.UUID        `json:"code_version_id"`
+	StudentID     uuid.UUID        `json:"student_id"`
 	Code          string           `json:"code"`
 	Language      string           `json:"language"`
 	Config        *ExecutionConfig `json:"config,omitempty"`
@@ -16,11 +20,11 @@ type ExecutionRequest struct {
 
 // TestCase representa un caso de prueba
 type TestCase struct {
-	TestID               string `json:"test_id"`
-	CodeVersionTestID    string `json:"code_version_test_id"`
-	Input                string `json:"input"`
-	ExpectedOutput       string `json:"expected_output"`
-	CustomValidationCode string `json:"custom_validation_code,omitempty"`
+	TestID               uuid.UUID `json:"test_id"`
+	CodeVersionTestID    uuid.UUID `json:"code_version_test_id"`
+	Input                string    `json:"input"`
+	ExpectedOutput       string    `json:"expected_output"`
+	CustomValidationCode string    `json:"custom_validation_code,omitempty"`
 }
 
 // HasCustomValidation verifica si el test case tiene validación personalizada
@@ -65,15 +69,15 @@ func (pl ProgrammingLanguage) IsValid() bool {
 
 // IsValid valida que el test case tenga los campos requeridos
 func (tc *TestCase) IsValid() bool {
-	return tc.TestID != "" && (tc.Input != "" || tc.CustomValidationCode != "")
+	return tc.TestID != uuid.Nil && (tc.Input != "" || tc.CustomValidationCode != "")
 }
 
 // ExecutionResponse representa la respuesta de ejecución con metadatos detallados
 type ExecutionResponse struct {
-	ApprovedTestIDs []string           `json:"approved_test_ids"`
+	ApprovedTestIDs []uuid.UUID        `json:"approved_test_ids"`
 	Success         bool               `json:"success"`
 	Message         string             `json:"message"`
-	ExecutionID     string             `json:"execution_id"`
+	ExecutionID     uuid.UUID          `json:"execution_id"`
 	Metadata        *ExecutionMetadata `json:"metadata,omitempty"`
 	PipelineSteps   []*PipelineStep    `json:"pipeline_steps,omitempty"`
 }
@@ -99,12 +103,12 @@ type CompilationResult struct {
 
 // TestResult resultado individual de un test
 type TestResult struct {
-	TestID          string `json:"test_id"`
-	Passed          bool   `json:"passed"`
-	ExpectedOutput  string `json:"expected_output,omitempty"`
-	ActualOutput    string `json:"actual_output,omitempty"`
-	ErrorMessage    string `json:"error_message,omitempty"`
-	ExecutionTimeMS int64  `json:"execution_time_ms"`
+	TestID          uuid.UUID `json:"test_id"`
+	Passed          bool      `json:"passed"`
+	ExpectedOutput  string    `json:"expected_output,omitempty"`
+	ActualOutput    string    `json:"actual_output,omitempty"`
+	ErrorMessage    string    `json:"error_message,omitempty"`
+	ExecutionTimeMS int64     `json:"execution_time_ms"`
 }
 
 // PipelineStep información de cada paso del pipeline
