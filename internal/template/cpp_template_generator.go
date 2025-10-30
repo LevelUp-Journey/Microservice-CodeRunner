@@ -79,7 +79,7 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 	var testLines []string
 	testCount := 0
 
-	for _, test := range tests {
+	for i, test := range tests {
 		testCount++
 		testID := test.CodeVersionTestID
 		if testID == uuid.Nil {
@@ -96,10 +96,14 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID.String()))
 			// Para casos simples, asumir un solo input/output
 			if test.Input != "" && test.ExpectedOutput != "" {
-				// Parse input - si es numérico, usar directamente, si no, entre comillas
-				input := g.formatInput(test.Input)
+				// Parse input - generar código de setup si hay arrays
+				setupCode, functionCall := g.parseComplexInput(test.Input, functionName, i)
 				expected := g.formatExpectedOutput(test.ExpectedOutput)
-				testLines = append(testLines, fmt.Sprintf("    CHECK(%s(%s) == %s);", functionName, input, expected))
+
+				if setupCode != "" {
+					testLines = append(testLines, setupCode)
+				}
+				testLines = append(testLines, fmt.Sprintf("    CHECK(%s == %s);", functionCall, expected))
 			}
 			testLines = append(testLines, "}")
 		}
@@ -108,7 +112,120 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 	return strings.Join(testLines, "\n"), testCount
 }
 
-// formatInput formatea el input para C++
+// parseComplexInput parsea inputs complejos que pueden incluir arrays y múltiples parámetros
+func (g *CppTemplateGenerator) parseComplexInput(input string, functionName string, testIndex int) (setupCode string, functionCall string) {
+	input = strings.TrimSpace(input)
+
+	// Detectar si hay arrays en el input (formato: [1,2,3] o similar)
+	arrayRegex := regexp.MustCompile(`\[([^\]]+)\]`)
+
+	if arrayRegex.MatchString(input) {
+		// Hay un array, necesitamos generar código de setup
+		var setupLines []string
+		var args []string
+
+		// Split por comas fuera de corchetes
+		parts := g.splitInputParameters(input)
+
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+
+			if strings.HasPrefix(part, "[") && strings.HasSuffix(part, "]") {
+				// Es un array
+				arrayContent := part[1 : len(part)-1] // Remover [ y ]
+				arrayVarName := fmt.Sprintf("arr%d", testIndex)
+
+				// Generar declaración del array
+				setupLines = append(setupLines, fmt.Sprintf("    int %s[] = {%s};", arrayVarName, arrayContent))
+
+				// Calcular tamaño del array
+				elements := strings.Split(arrayContent, ",")
+				arraySize := len(elements)
+
+				// Agregar array como argumento
+				args = append(args, arrayVarName)
+				// Agregar tamaño como siguiente argumento
+				args = append(args, fmt.Sprintf("%d", arraySize))
+			} else {
+				// Es un parámetro simple
+				args = append(args, g.formatSimpleParameter(part))
+			}
+		}
+
+		setupCode = strings.Join(setupLines, "\n")
+		functionCall = fmt.Sprintf("%s(%s)", functionName, strings.Join(args, ", "))
+		return setupCode, functionCall
+	}
+
+	// No hay arrays, usar formatInput original pero soportar múltiples parámetros
+	parts := strings.Split(input, ",")
+	if len(parts) > 1 {
+		var formattedParts []string
+		for _, part := range parts {
+			formattedParts = append(formattedParts, g.formatSimpleParameter(strings.TrimSpace(part)))
+		}
+		functionCall = fmt.Sprintf("%s(%s)", functionName, strings.Join(formattedParts, ", "))
+		return "", functionCall
+	}
+
+	// Input simple, un solo parámetro
+	functionCall = fmt.Sprintf("%s(%s)", functionName, g.formatSimpleParameter(input))
+	return "", functionCall
+}
+
+// splitInputParameters divide el input en parámetros respetando los corchetes de arrays
+func (g *CppTemplateGenerator) splitInputParameters(input string) []string {
+	var parts []string
+	var current strings.Builder
+	bracketDepth := 0
+
+	for _, char := range input {
+		if char == '[' {
+			bracketDepth++
+			current.WriteRune(char)
+		} else if char == ']' {
+			bracketDepth--
+			current.WriteRune(char)
+		} else if char == ',' && bracketDepth == 0 {
+			// Coma fuera de corchetes, es un separador de parámetros
+			parts = append(parts, current.String())
+			current.Reset()
+		} else {
+			current.WriteRune(char)
+		}
+	}
+
+	// Agregar el último parámetro
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	return parts
+}
+
+// formatSimpleParameter formatea un parámetro simple (no array)
+func (g *CppTemplateGenerator) formatSimpleParameter(param string) string {
+	param = strings.TrimSpace(param)
+
+	if param == "" {
+		return ""
+	}
+
+	// Si es numérico, devolver tal cual
+	if g.isNumeric(param) {
+		return param
+	}
+
+	// Si es booleano
+	if param == "true" || param == "false" {
+		return param
+	}
+
+	// Si no, entre comillas como string
+	return fmt.Sprintf("\"%s\"", param)
+}
+
+// formatInput formatea el input para C++ (mantenida para compatibilidad)
 func (g *CppTemplateGenerator) formatInput(input string) string {
 	input = strings.TrimSpace(input)
 	if input == "" {
