@@ -136,6 +136,11 @@ func (g *CppTemplateGenerator) formatExpectedOutput(output string) string {
 		return output
 	}
 
+	// Si es un valor booleano, convertir a bool de C++
+	if output == "true" || output == "false" {
+		return output
+	}
+
 	// Si no, entre comillas como string
 	return fmt.Sprintf("\"%s\"", output)
 }
