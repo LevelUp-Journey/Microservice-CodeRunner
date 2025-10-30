@@ -1,0 +1,23 @@
+{
+  "challenge_id": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "code": "int countSetBits(int n) {\n    if (n \u003c 0) n = -n;\n    int cnt = 0;\n    while (n) {\n        cnt += n \u0026 1;\n        n \u003e\u003e= 1;\n    }\n    return cnt;\n}",
+  "code_version_id": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "student_id": "c032e274-276e-44c8-a672-89d184ee1463",
+  "tests": [
+    {
+      "code_version_test_id": "a63e136d-d168-49f5-9cf9-b99eeddf3c3f",
+      "expected_output": "0",
+      "input": "0"
+    },
+    {
+      "code_version_test_id": "dee5976c-54db-4c2d-8c14-9a05cf725b42",
+      "expected_output": "3",
+      "input": "7"
+    },
+    {
+      "code_version_test_id": "93922fa4-83d8-4d56-b11b-c38267919521",
+      "expected_output": "10",
+      "input": "1023"
+    }
+  ]
+}

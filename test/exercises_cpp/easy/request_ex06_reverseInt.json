@@ -1,0 +1,23 @@
+{
+  "challenge_id": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "code": "int reverseInt(int n) {\n    int sign = n \u003c 0 ? -1 : 1;\n    if (n \u003c 0) n = -n;\n    int rev = 0;\n    while (n \u003e 0) {\n        rev = rev * 10 + (n % 10);\n        n /= 10;\n    }\n    return sign * rev;\n}",
+  "code_version_id": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "student_id": "c032e274-276e-44c8-a672-89d184ee1463",
+  "tests": [
+    {
+      "code_version_test_id": "b3b5dfa1-eb11-496e-8e80-ba7a80ae1aa7",
+      "expected_output": "321",
+      "input": "123"
+    },
+    {
+      "code_version_test_id": "0e5a275a-8653-4894-97e6-0672b654af77",
+      "expected_output": "-21",
+      "input": "-120"
+    },
+    {
+      "code_version_test_id": "0c3ba9ba-30cc-4a61-bc0b-7a33e1aa88ac",
+      "expected_output": "0",
+      "input": "0"
+    }
+  ]
+}
