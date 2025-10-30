@@ -1,0 +1,40 @@
+{
+  "solution_id": "550e8400-e29b-41d4-a716-446655440043",
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440044",
+  "code_version_id": "550e8400-e29b-41d4-a716-446655440045",
+  "student_id": "550e8400-e29b-41d4-a716-446655440046",
+  "code": "#include <string>\n#include <vector>\n\nbool isMatch(const std::string& s, const std::string& p) {\n    int m = s.size();\n    int n = p.size();\n\n    std::vector<std::vector<bool>> dp(m + 1, std::vector<bool>(n + 1, false));\n    dp[0][0] = true;\n\n    // Handle patterns like a*, a*b*, etc.\n    for (int j = 1; j <= n; ++j) {\n        if (p[j - 1] == '*') {\n            dp[0][j] = dp[0][j - 2];\n        }\n    }\n\n    for (int i = 1; i <= m; ++i) {\n        for (int j = 1; j <= n; ++j) {\n            if (p[j - 1] == '.' || p[j - 1] == s[i - 1]) {\n                dp[i][j] = dp[i - 1][j - 1];\n            } else if (p[j - 1] == '*') {\n                // Zero occurrence of the preceding element\n                dp[i][j] = dp[i][j - 2];\n\n                // One or more occurrences\n                if (p[j - 2] == '.' || p[j - 2] == s[i - 1]) {\n                    dp[i][j] = dp[i][j] || dp[i - 1][j];\n                }\n            }\n        }\n    }\n\n    return dp[m][n];\n}",
+  "language": "cpp",
+  "test_cases": [
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440047",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440048",
+      "input": "\"aa\" \"a\"",
+      "expected_output": "false"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440049",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440050",
+      "input": "\"aa\" \"a*\"",
+      "expected_output": "true"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440051",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440052",
+      "input": "\"ab\" \".*\"",
+      "expected_output": "true"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440053",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440054",
+      "input": "\"aab\" \"c*a*b\"",
+      "expected_output": "true"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440055",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440056",
+      "input": "\"mississippi\" \"mis*is*p*.\"",
+      "expected_output": "false"
+    }
+  ]
+}

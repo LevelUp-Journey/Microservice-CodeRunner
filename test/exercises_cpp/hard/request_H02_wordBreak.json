@@ -1,0 +1,40 @@
+{
+  "solution_id": "550e8400-e29b-41d4-a716-446655440015",
+  "challenge_id": "550e8400-e29b-41d4-a716-446655440016",
+  "code_version_id": "550e8400-e29b-41d4-a716-446655440017",
+  "student_id": "550e8400-e29b-41d4-a716-446655440018",
+  "code": "#include <string>\n#include <unordered_set>\n#include <vector>\n\nbool wordBreak(const std::string& s, const std::vector<std::string>& wordDict) {\n    std::unordered_set<std::string> wordSet(wordDict.begin(), wordDict.end());\n    std::vector<bool> dp(s.size() + 1, false);\n    dp[0] = true;\n\n    for (size_t i = 1; i <= s.size(); ++i) {\n        for (size_t j = 0; j < i; ++j) {\n            if (dp[j] && wordSet.count(s.substr(j, i - j))) {\n                dp[i] = true;\n                break;\n            }\n        }\n    }\n\n    return dp[s.size()];\n}",
+  "language": "cpp",
+  "test_cases": [
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440019",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440020",
+      "input": "\"leetcode\" [\"leet\",\"code\"]",
+      "expected_output": "true"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440021",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440022",
+      "input": "\"applepenapple\" [\"apple\",\"pen\"]",
+      "expected_output": "true"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440023",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440024",
+      "input": "\"catsandog\" [\"cats\",\"dog\",\"sand\",\"and\",\"cat\"]",
+      "expected_output": "false"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440025",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440026",
+      "input": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab\" [\"a\",\"aa\",\"aaa\",\"aaaa\",\"aaaaa\",\"aaaaaa\",\"aaaaaaa\",\"aaaaaaaa\",\"aaaaaaaaa\",\"aaaaaaaaaa\"]",
+      "expected_output": "false"
+    },
+    {
+      "test_id": "550e8400-e29b-41d4-a716-446655440027",
+      "code_version_test_id": "550e8400-e29b-41d4-a716-446655440028",
+      "input": "\"cars\" [\"car\",\"ca\",\"rs\"]",
+      "expected_output": "true"
+    }
+  ]
+}
