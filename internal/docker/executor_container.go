@@ -76,8 +76,13 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 
 	e.logExecutionResults(result)
 
-	// Parse test results
-	e.parseTestResults(result, config.TestIDs)
+	// Only parse test results if compilation succeeded
+	if exitCode == 0 {
+		e.parseTestResults(result, config.TestIDs)
+	} else {
+		// Compilation or runtime error - detect error type
+		e.detectErrorType(result)
+	}
 
 	return result, nil
 }
@@ -162,6 +167,51 @@ func (e *DockerExecutor) captureLogs(ctx context.Context, containerID string) (s
 	}
 
 	return stdout.String(), stderr.String(), nil
+}
+
+// detectErrorType detecta el tipo de error basándose en stderr
+func (e *DockerExecutor) detectErrorType(result *ExecutionResult) {
+	stderr := result.StdErr
+
+	// Detectar errores de compilación
+	if strings.Contains(stderr, "error:") || strings.Contains(stderr, "fatal error:") {
+		result.ErrorType = "compilation_error"
+
+		// Extraer el primer error de compilación como mensaje
+		lines := strings.Split(stderr, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "error:") {
+				result.ErrorMessage = strings.TrimSpace(line)
+				break
+			}
+		}
+
+		if result.ErrorMessage == "" {
+			result.ErrorMessage = "Compilation failed - see stderr for details"
+		}
+
+		log.Printf("  🔴 COMPILATION ERROR DETECTED")
+		log.Printf("  📝 Error: %s", result.ErrorMessage)
+
+		// No tests passed if compilation failed
+		result.PassedTests = 0
+		result.FailedTests = 0
+		result.TotalTests = 0
+		return
+	}
+
+	// Detectar errores de runtime
+	if strings.Contains(stderr, "Segmentation fault") || strings.Contains(stderr, "core dumped") {
+		result.ErrorType = "runtime_error"
+		result.ErrorMessage = "Runtime error: Segmentation fault"
+		log.Printf("  🔴 RUNTIME ERROR: Segmentation fault")
+		return
+	}
+
+	// Error genérico
+	result.ErrorType = "execution_error"
+	result.ErrorMessage = "Execution failed - see stderr for details"
+	log.Printf("  🔴 EXECUTION ERROR")
 }
 
 // Cleanup limpia recursos del contenedor
