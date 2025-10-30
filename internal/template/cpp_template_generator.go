@@ -45,7 +45,7 @@ func (g *CppTemplateGenerator) GenerateTemplate(req *types.ExecutionRequest, exe
 		Language:            req.Language,
 		GeneratorType:       "cpp_template",
 		TestCode:            template,
-		ChallengeID:         req.CodeVersionID, // Usando CodeVersionID como ChallengeID
+		ChallengeID:         req.CodeVersionID.String(), // Convertir UUID a string
 		TestCasesCount:      testCount,
 		HasCustomValidation: g.hasCustomValidation(req.TestCases),
 		GenerationTimeMS:    time.Since(startTime).Milliseconds(),
@@ -82,18 +82,18 @@ func (g *CppTemplateGenerator) generateTestCode(tests []*types.TestCase, functio
 	for _, test := range tests {
 		testCount++
 		testID := test.CodeVersionTestID
-		if testID == "" {
-			testID = fmt.Sprintf("test_%d", testCount)
+		if testID == uuid.Nil {
+			testID = uuid.New()
 		}
 
 		if test.HasCustomValidation() {
 			// Usar validación personalizada
-			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID))
+			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID.String()))
 			testLines = append(testLines, test.CustomValidationCode)
 			testLines = append(testLines, "}")
 		} else {
 			// Usar input/output estándar
-			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID))
+			testLines = append(testLines, fmt.Sprintf(`TEST_CASE("%s") {`, testID.String()))
 			// Para casos simples, asumir un solo input/output
 			if test.Input != "" && test.ExpectedOutput != "" {
 				// Parse input - si es numérico, usar directamente, si no, entre comillas
