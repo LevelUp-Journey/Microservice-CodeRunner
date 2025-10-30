@@ -1,0 +1,23 @@
+{
+  "challengeId": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "codeVersionId": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "studentId": "c032e274-276e-44c8-a672-89d184ee1463",
+  "code": "int addOne(int x) {\n    return x + 1;\n}",
+  "tests": [
+    {
+      "codeVersionTestId": "123ad9ef-ec8a-45ab-9dc9-41ba034a32e1",
+      "input": "0",
+      "expectedOutput": "1"
+    },
+    {
+      "codeVersionTestId": "b1295bd0-c407-41c3-8bb7-230b5f539ce5",
+      "input": "5",
+      "expectedOutput": "6"
+    },
+    {
+      "codeVersionTestId": "02c7b14e-3465-4f4a-b151-3d588d3ca57f",
+      "input": "-3",
+      "expectedOutput": "-2"
+    }
+  ]
+}

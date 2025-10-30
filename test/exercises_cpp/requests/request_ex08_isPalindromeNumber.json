@@ -1,0 +1,23 @@
+{
+  "challengeId": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "codeVersionId": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "studentId": "c032e274-276e-44c8-a672-89d184ee1463",
+  "code": "int isPalindromeNumber(int n) {\n    int sign = n \u003c 0 ? -1 : 1;\n    if (n \u003c 0) n = -n;\n    int original = n;\n    int rev = 0;\n    while (n \u003e 0) {\n        rev = rev * 10 + (n % 10);\n        n /= 10;\n    }\n    return rev == original ? 1 : 0;\n}",
+  "tests": [
+    {
+      "codeVersionTestId": "f7316721-88a2-438e-99ab-2a5961e4d0f8",
+      "input": "121",
+      "expectedOutput": "1"
+    },
+    {
+      "codeVersionTestId": "94eee0c5-423d-4670-84c3-bced66bd1518",
+      "input": "-121",
+      "expectedOutput": "1"
+    },
+    {
+      "codeVersionTestId": "690662d0-4613-4fbb-99e9-62a556223b67",
+      "input": "123",
+      "expectedOutput": "0"
+    }
+  ]
+}
