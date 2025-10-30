@@ -1,0 +1,23 @@
+{
+  "challenge_id": "9f0d0b5b-0fb6-40a6-a2eb-14f2850f54aa",
+  "code": "int fibonacci(int n) {\n    if (n \u003c= 0) return 0;\n    if (n == 1) return 1;\n    int a = 0, b = 1;\n    for (int i = 2; i \u003c= n; ++i) {\n        int c = a + b;\n        a = b;\n        b = c;\n    }\n    return b;\n}",
+  "code_version_id": "d6a09a11-5e75-4bfc-a1d0-0ce5e81487fb",
+  "student_id": "c032e274-276e-44c8-a672-89d184ee1463",
+  "tests": [
+    {
+      "code_version_test_id": "87ef3476-ccaf-4a9a-b93f-fa16f8d29010",
+      "expected_output": "0",
+      "input": "0"
+    },
+    {
+      "code_version_test_id": "5097a1ea-a9c4-42d7-b15c-2c39eb643ab4",
+      "expected_output": "5",
+      "input": "5"
+    },
+    {
+      "code_version_test_id": "e2120bed-1e9a-4b88-bc87-2f6fc0ddd150",
+      "expected_output": "55",
+      "input": "10"
+    }
+  ]
+}
