@@ -15,6 +15,12 @@
       "input": "graph={{0,1,0},{1,0,2},{0,2,0}},start=1",
       "expected_output": "[1,0,2]",
       "custom_validation_code": "    vector<vector<pair<int, int>>> graph = {\n        {{1, 1}},\n        {{0, 1}, {2, 2}},\n        {{1, 2}}\n    };\n    vector<int> result = dijkstra(graph, 1);\n    vector<int> expected = {1, 0, 2};\n    CHECK(result == expected);"
+    },
+    {
+      "code_version_test_id": "660e8400-e29b-41d4-a716-446655440045",
+      "input": "graph={{0,2},{2,0}},start=0",
+      "expected_output": "[0,2]",
+      "custom_validation_code": "    vector<vector<pair<int, int>>> graph = {\n        {{1, 2}},\n        {{0, 2}}\n    };\n    vector<int> result = dijkstra(graph, 0);\n    vector<int> expected = {0, 2};\n    CHECK(result == expected);"
     }
   ]
 }

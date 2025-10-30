@@ -15,6 +15,12 @@
       "input": "0.0,1.0,100",
       "expected_output": "0.333333",
       "custom_validation_code": "    double result = integrate(0.0, 1.0, 100);\n    CHECK(abs(result - 0.333333) < 1e-4);"
+    },
+    {
+      "code_version_test_id": "660e8400-e29b-41d4-a716-446655440050",
+      "input": "0.0,2.0,10",
+      "expected_output": "2.666666",
+      "custom_validation_code": "    double result = integrate(0.0, 2.0, 10);\n    CHECK(abs(result - (8.0/3.0)) < 1e-3);"
     }
   ]
 }

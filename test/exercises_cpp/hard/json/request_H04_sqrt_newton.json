@@ -15,6 +15,12 @@
       "input": "9.0,5",
       "expected_output": "3.0",
       "custom_validation_code": "    double result = sqrt_newton(9.0, 5);\n    CHECK(abs(result - 3.0) < 1e-10);"
+    },
+    {
+      "code_version_test_id": "660e8400-e29b-41d4-a716-446655440060",
+      "input": "16.0,10",
+      "expected_output": "4.0",
+      "custom_validation_code": "    double result = sqrt_newton(16.0, 10);\n    CHECK(abs(result - 4.0) < 1e-10);"
     }
   ]
 }
