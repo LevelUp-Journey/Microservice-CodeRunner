@@ -50,9 +50,10 @@ func LoadConfig() (*Config, error) {
 			MaxRetries:        getEnvInt("KAFKA_MAX_RETRIES", 3),
 		},
 		ServiceDiscovery: ServiceDiscoveryConfig{
-			URL:      getEnv("SERVICE_DISCOVERY_URL", ""),
-			Enabled:  getEnvBool("SERVICE_DISCOVERY_ENABLED", false),
-			PublicIP: getEnv("SERVICE_PUBLIC_IP", ""),
+			URL:         getEnv("SERVICE_DISCOVERY_URL", ""),
+			Enabled:     getEnvBool("SERVICE_DISCOVERY_ENABLED", false),
+			PublicIP:    getEnv("SERVICE_PUBLIC_IP", ""),
+			ServiceName: getEnv("SERVICE_NAME", "CODE-RUNNER-SERVICE"),
 		},
 	}
 

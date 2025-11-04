@@ -92,7 +92,7 @@ func main() {
 			}
 		}
 
-		go registerWithEureka(eurekaURL, ip, portInt)
+		go registerWithEureka(eurekaURL, ip, portInt, config.ServiceDiscovery.ServiceName)
 	} else {
 		log.Printf("ℹ️  Service Discovery is disabled")
 	}
@@ -120,7 +120,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func registerWithEureka(eurekaURL, ip string, port int) {
+func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 	type DataCenterInfo struct {
 		Class string `json:"@class"`
 		Name  string `json:"name"`
@@ -148,9 +148,9 @@ func registerWithEureka(eurekaURL, ip string, port int) {
 	instanceData := EurekaRequest{
 		Instance: Instance{
 			HostName:   ip,
-			App:        "CODE-RUNNER-SERVICE",
+			App:        serviceName,
 			IPAddr:     ip,
-			VipAddress: "CODE-RUNNER-SERVICE",
+			VipAddress: serviceName,
 			Status:     "UP",
 			Port:       PortInfo{Port: port, Enabled: true},
 			DataCenterInfo: DataCenterInfo{
@@ -159,6 +159,10 @@ func registerWithEureka(eurekaURL, ip string, port int) {
 			},
 		},
 	}
+
+	log.Printf("📝 Registering service with name: %s", instanceData.Instance.App)
+	log.Printf("📍 IP Address: %s", ip)
+	log.Printf("🔌 Port: %d", port)
 
 	jsonData, err := json.Marshal(instanceData)
 	if err != nil {
@@ -177,7 +181,7 @@ func registerWithEureka(eurekaURL, ip string, port int) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		log.Printf("✅ Service registered in Eureka as CODE-RUNNER-SERVICE at %s:%d", ip, port)
+		log.Printf("✅ Service registered in Eureka as %s at %s:%d", serviceName, ip, port)
 	} else {
 		log.Printf("❌ Registration failed with status: %d", resp.StatusCode)
 		return

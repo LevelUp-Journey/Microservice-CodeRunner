@@ -59,7 +59,8 @@ type KafkaConfig struct {
 
 // ServiceDiscoveryConfig holds service discovery configuration
 type ServiceDiscoveryConfig struct {
-	URL      string `mapstructure:"SERVICE_DISCOVERY_URL"`
-	Enabled  bool   `mapstructure:"SERVICE_DISCOVERY_ENABLED"`
-	PublicIP string `mapstructure:"SERVICE_PUBLIC_IP"`
+	URL         string `mapstructure:"SERVICE_DISCOVERY_URL"`
+	Enabled     bool   `mapstructure:"SERVICE_DISCOVERY_ENABLED"`
+	PublicIP    string `mapstructure:"SERVICE_PUBLIC_IP"`
+	ServiceName string `mapstructure:"SERVICE_NAME"`
 }
