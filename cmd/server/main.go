@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -72,11 +73,25 @@ func main() {
 
 	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
 		eurekaURL := strings.TrimRight(config.ServiceDiscovery.URL, "/")
-		ip, err := getLocalIP()
-		if err != nil {
-			log.Printf("⚠️  Warning: Failed to get local IP: %v", err)
-			ip = "localhost"
+
+		// Preferir SERVICE_PUBLIC_IP si está configurada
+		var ip string
+		if config.ServiceDiscovery.PublicIP != "" {
+			ip = config.ServiceDiscovery.PublicIP
+			log.Printf("🌐 Using configured public IP: %s", ip)
+		} else {
+			// Intentar detectar IP pública automáticamente
+			detectedIP, err := getPublicIP()
+			if err != nil {
+				log.Printf("⚠️  Warning: Failed to get public IP: %v", err)
+				log.Printf("💡 Consider setting SERVICE_PUBLIC_IP environment variable")
+				ip = "localhost"
+			} else {
+				ip = detectedIP
+				log.Printf("🌐 Detected public IP: %s", ip)
+			}
 		}
+
 		go registerWithEureka(eurekaURL, ip, portInt)
 	} else {
 		log.Printf("ℹ️  Service Discovery is disabled")
@@ -193,6 +208,54 @@ func registerWithEureka(eurekaURL, ip string, port int) {
 			log.Printf("❌ Heartbeat failed with status: %d", resp.StatusCode)
 		}
 	}
+}
+
+// getPublicIP intenta detectar la IP pública del servidor
+// Primero intenta obtenerla de servicios externos, luego cae a detección local
+func getPublicIP() (string, error) {
+	// Método 1: Consultar servicio externo (ifconfig.me es rápido y confiable)
+	publicIP, err := getPublicIPFromService()
+	if err == nil && publicIP != "" {
+		return publicIP, nil
+	}
+
+	// Método 2: Fallback a detección local (puede ser IP privada en Docker/NAT)
+	return getLocalIP()
+}
+
+// getPublicIPFromService consulta un servicio externo para obtener la IP pública
+func getPublicIPFromService() (string, error) {
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	// Intentar varios servicios en caso de que uno falle
+	services := []string{
+		"https://api.ipify.org",
+		"https://ifconfig.me/ip",
+		"https://icanhazip.com",
+	}
+
+	for _, service := range services {
+		resp, err := client.Get(service)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			body := make([]byte, 64)
+			n, err := resp.Body.Read(body)
+			if err != nil && err.Error() != "EOF" {
+				continue
+			}
+			ip := strings.TrimSpace(string(body[:n]))
+			// Validar que sea una IP válida
+			if netIP := net.ParseIP(ip); netIP != nil {
+				return ip, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("failed to get public IP from external services")
 }
 
 func getLocalIP() (string, error) {
