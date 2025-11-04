@@ -17,15 +17,27 @@ var DB *gorm.DB
 
 // InitDB initializes the database connection
 func InitDB(config *env.DatabaseConfig) error {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s timezone=%s",
+	// Build DSN with explicit sslmode parameter
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s timezone=%s sslmode=%s",
 		config.Host,
 		config.Port,
 		config.User,
 		config.Password,
 		config.Name,
-		config.SSLMode,
 		config.Timezone,
+		config.SSLMode,
 	)
+
+	// Alternative URL format (commented out, use if needed):
+	// dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=%s&timezone=%s",
+	// 	config.User,
+	// 	config.Password,
+	// 	config.Host,
+	// 	config.Port,
+	// 	config.Name,
+	// 	config.SSLMode,
+	// 	config.Timezone,
+	// )
 
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{

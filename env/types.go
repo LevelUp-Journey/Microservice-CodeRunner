@@ -4,10 +4,12 @@ import "time"
 
 // Config holds all configuration for the application
 type Config struct {
-	App      AppConfig      `mapstructure:",squash"`
-	Server   ServerConfig   `mapstructure:",squash"`
-	Database DatabaseConfig `mapstructure:",squash"`
-	Logging  LoggingConfig  `mapstructure:",squash"`
+	App              AppConfig              `mapstructure:",squash"`
+	Server           ServerConfig           `mapstructure:",squash"`
+	Database         DatabaseConfig         `mapstructure:",squash"`
+	Logging          LoggingConfig          `mapstructure:",squash"`
+	Kafka            KafkaConfig            `mapstructure:",squash"`
+	ServiceDiscovery ServiceDiscoveryConfig `mapstructure:",squash"`
 }
 
 // AppConfig holds application configuration
@@ -40,4 +42,23 @@ type DatabaseConfig struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"LOG_LEVEL"`
 	Format string `mapstructure:"LOG_FORMAT"`
+}
+
+// KafkaConfig holds Kafka/Event Hub configuration
+type KafkaConfig struct {
+	BootstrapServers  string `mapstructure:"KAFKA_BOOTSTRAP_SERVERS"`
+	ConnectionString  string `mapstructure:"KAFKA_CONNECTION_STRING"`
+	Topic             string `mapstructure:"KAFKA_TOPIC"`
+	ConsumerGroup     string `mapstructure:"KAFKA_CONSUMER_GROUP"`
+	SASLMechanism     string `mapstructure:"KAFKA_SASL_MECHANISM"`
+	SecurityProtocol  string `mapstructure:"KAFKA_SECURITY_PROTOCOL"`
+	ProducerTimeoutMs int    `mapstructure:"KAFKA_PRODUCER_TIMEOUT_MS"`
+	ConsumerTimeoutMs int    `mapstructure:"KAFKA_CONSUMER_TIMEOUT_MS"`
+	MaxRetries        int    `mapstructure:"KAFKA_MAX_RETRIES"`
+}
+
+// ServiceDiscoveryConfig holds service discovery configuration
+type ServiceDiscoveryConfig struct {
+	URL     string `mapstructure:"SERVICE_DISCOVERY_URL"`
+	Enabled bool   `mapstructure:"SERVICE_DISCOVERY_ENABLED"`
 }

@@ -77,24 +77,53 @@ psql -d coderunner -f migrations/001_create_execution_tables.sql
 ### Environment Variables
 
 #### Application
-- `APP_NAME` - Application name (default: "Microservice CodeRunner gRPC API")
+- `APP_NAME` - Application name (default: "microservice-code-runner")
 - `API_VERSION` - API version (default: "v1")
 - `GRPC_PORT` - gRPC server port (default: 9084)
 - `PORT` - HTTP port for health checks (default: 8084)
 
+#### Service Discovery
+- `SERVICE_DISCOVERY_URL` - Eureka service discovery URL
+- `SERVICE_DISCOVERY_ENABLED` - Enable/disable service discovery (default: false)
+
+#### Kafka (Azure Event Hub)
+- `KAFKA_BOOTSTRAP_SERVERS` - Bootstrap servers (Azure Event Hub format)
+- `KAFKA_CONNECTION_STRING` - Azure Event Hub connection string
+- `KAFKA_TOPIC` - Topic/Event Hub name (default: "challenge.completed")
+- `KAFKA_CONSUMER_GROUP` - Consumer group ID (default: "code-runner-service")
+- `KAFKA_SASL_MECHANISM` - SASL mechanism (default: "PLAIN")
+- `KAFKA_SECURITY_PROTOCOL` - Security protocol (default: "SASL_SSL")
+- `KAFKA_PRODUCER_TIMEOUT_MS` - Producer timeout in ms (default: 30000)
+- `KAFKA_CONSUMER_TIMEOUT_MS` - Consumer timeout in ms (default: 30000)
+- `KAFKA_MAX_RETRIES` - Maximum retry attempts (default: 3)
+
 #### Database (PostgreSQL)
-- `DB_HOST` - Database host (default: localhost)
+- `DB_HOST` - Database host (Azure format: *.postgres.database.azure.com)
 - `DB_PORT` - Database port (default: 5432)
-- `DB_USER` - Database user (default: postgres)
-- `DB_PASSWORD` - Database password (default: postgres)
-- `DB_NAME` - Database name (default: coderunner)
-- `DB_SSLMODE` - SSL mode (default: disable)
+- `DB_USER` - Database user
+- `DB_PASSWORD` - Database password
+- `DB_NAME` - Database name (default: code_runner_db)
+- `DB_SSLMODE` - SSL mode (use "require" for Azure, default: disable)
 - `DB_TIMEZONE` - Database timezone (default: UTC)
 
 #### Database Connection Pool
 - `DB_MAX_OPEN_CONNS` - Max open connections (default: 25)
 - `DB_MAX_IDLE_CONNS` - Max idle connections (default: 10)
 - `DB_CONN_MAX_LIFETIME` - Connection max lifetime in seconds (default: 3600)
+
+#### Logging
+- `LOG_LEVEL` - Logging level (debug, info, warn, error) (default: info)
+- `LOG_FORMAT` - Log format (json, text) (default: json)
+
+### Azure Integration
+
+This microservice is configured to work with Azure services:
+
+1. **Azure Event Hub (Kafka)** - For event-driven communication
+2. **Azure Database for PostgreSQL** - For data persistence
+3. **Azure Service Discovery** - For microservice registration
+
+See [Kafka Configuration Guide](docs/KAFKA_CONFIGURATION.md) for detailed setup instructions.
 
 ## gRPC Service
 

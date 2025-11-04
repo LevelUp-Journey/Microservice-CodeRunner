@@ -9,6 +9,7 @@ import (
 	"code-runner/env"
 	"code-runner/internal/database"
 	"code-runner/internal/docker"
+	"code-runner/internal/kafka"
 	"code-runner/internal/server"
 )
 
@@ -26,6 +27,18 @@ func main() {
 	defer func() {
 		if err := database.Close(); err != nil {
 			log.Printf("Error closing database: %v", err)
+		}
+	}()
+
+	// Initialize Kafka client
+	log.Printf("📡 Initializing Kafka client...")
+	kafkaClient, err := kafka.NewKafkaClient(&config.Kafka)
+	if err != nil {
+		log.Fatalf("Failed to initialize Kafka client: %v", err)
+	}
+	defer func() {
+		if err := kafkaClient.Close(); err != nil {
+			log.Printf("Error closing Kafka client: %v", err)
 		}
 	}()
 
@@ -50,6 +63,18 @@ func main() {
 	log.Printf("🔧 Configuration: plaintext negotiation, 8MB max message size")
 	log.Printf("🌐 Client connection: static://localhost:%s", config.Server.GRPCPort)
 	log.Printf("🗄️  Database: %s:%s/%s", config.Database.Host, config.Database.Port, config.Database.Name)
+
+	// Print Kafka configuration
+	if config.Kafka.BootstrapServers != "" {
+		log.Printf("📨 Kafka: %s", config.Kafka.BootstrapServers)
+		log.Printf("📝 Topic: %s", config.Kafka.Topic)
+		log.Printf("👥 Consumer Group: %s", config.Kafka.ConsumerGroup)
+	}
+
+	// Print Service Discovery configuration
+	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
+		log.Printf("🔍 Service Discovery: %s", config.ServiceDiscovery.URL)
+	}
 
 	// Override with environment variable if set (for backward compatibility)
 	port := os.Getenv("GRPC_PORT")
