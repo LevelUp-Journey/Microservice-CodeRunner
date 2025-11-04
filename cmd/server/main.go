@@ -20,13 +20,11 @@ import (
 )
 
 func main() {
-	// Load configuration
 	config, err := env.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize database
 	if err := database.InitDB(&config.Database); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -36,26 +34,25 @@ func main() {
 		}
 	}()
 
-	// Initialize Kafka client
 	log.Printf("📡 Initializing Kafka client...")
 	kafkaClient, err := kafka.NewKafkaClient(&config.Kafka)
 	if err != nil {
-		log.Fatalf("Failed to initialize Kafka client: %v", err)
+		log.Printf("⚠️  Warning: Failed to initialize Kafka client: %v", err)
+		log.Printf("ℹ️  Continuing without Kafka support...")
+	} else {
+		defer func() {
+			if err := kafkaClient.Close(); err != nil {
+				log.Printf("Error closing Kafka client: %v", err)
+			}
+		}()
 	}
-	defer func() {
-		if err := kafkaClient.Close(); err != nil {
-			log.Printf("Error closing Kafka client: %v", err)
-		}
-	}()
 
-	// Initialize Docker executor and verify images
 	log.Printf("🐳 Initializing Docker environment...")
 	dockerExecutor, err := docker.NewDockerExecutor()
 	if err != nil {
 		log.Fatalf("Failed to create Docker executor: %v", err)
 	}
 
-	// Verify and build Docker images if necessary
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -63,30 +60,52 @@ func main() {
 		log.Fatalf("Failed to ensure Docker images are ready: %v", err)
 	}
 
-	// 🚀 Registrar en Eureka vía API REST
-	eurekaURL := os.Getenv("SERVICE_DISCOVERY_URL")
-	if eurekaURL == "" {
-		eurekaURL = "http://localhost:8761/eureka"
-	} else {
-		eurekaURL = strings.TrimRight(eurekaURL, "/") // ✅ elimina barras finales
+	grpcPort := os.Getenv("GRPC_PORT")
+	if grpcPort == "" {
+		grpcPort = config.Server.GRPCPort
 	}
 
-	ip, err := getLocalIP()
-	if err != nil {
-		log.Fatalf("Failed to get local IP: %v", err)
-	}
-
-	port := os.Getenv("GRPC_PORT")
-	if port == "" {
-		port = config.Server.GRPCPort
-	}
-
-	portInt, err := strconv.Atoi(port)
+	portInt, err := strconv.Atoi(grpcPort)
 	if err != nil {
 		log.Fatalf("Invalid GRPC_PORT: %v", err)
 	}
 
-	// Estructuras para el JSON de registro
+	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
+		eurekaURL := strings.TrimRight(config.ServiceDiscovery.URL, "/")
+		ip, err := getLocalIP()
+		if err != nil {
+			log.Printf("⚠️  Warning: Failed to get local IP: %v", err)
+			ip = "localhost"
+		}
+		go registerWithEureka(eurekaURL, ip, portInt)
+	} else {
+		log.Printf("ℹ️  Service Discovery is disabled")
+	}
+
+	log.Printf("🚀 Starting %s gRPC Server", config.App.Name)
+	log.Printf("📍 Port: %s", grpcPort)
+	log.Printf("🔧 Configuration: plaintext negotiation, 8MB max message size")
+	log.Printf("🌐 Client connection: static://localhost:%s", grpcPort)
+	log.Printf("🗄️  Database: %s:%s/%s", config.Database.Host, config.Database.Port, config.Database.Name)
+
+	if config.Kafka.BootstrapServers != "" {
+		log.Printf("📨 Kafka: %s", config.Kafka.BootstrapServers)
+		log.Printf("📝 Topic: %s", config.Kafka.Topic)
+		log.Printf("👥 Consumer Group: %s", config.Kafka.ConsumerGroup)
+	}
+
+	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
+		log.Printf("🔍 Service Discovery: %s", config.ServiceDiscovery.URL)
+	}
+
+	if err := server.StartServer(grpcPort, database.GetDB()); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+
+	log.Println("Server stopped")
+}
+
+func registerWithEureka(eurekaURL, ip string, port int) {
 	type DataCenterInfo struct {
 		Class string `json:"@class"`
 		Name  string `json:"name"`
@@ -111,15 +130,14 @@ func main() {
 		Instance Instance `json:"instance"`
 	}
 
-	// Crear la instancia
 	instanceData := EurekaRequest{
 		Instance: Instance{
-			HostName:   ip, // Usar IP como hostname
-			App:        "CODE_RUNNER_SERVICE",
+			HostName:   ip,
+			App:        "CODE-RUNNER-SERVICE",
 			IPAddr:     ip,
-			VipAddress: "CODE_RUNNER_SERVICE",
+			VipAddress: "CODE-RUNNER-SERVICE",
 			Status:     "UP",
-			Port:       PortInfo{Port: portInt, Enabled: true},
+			Port:       PortInfo{Port: port, Enabled: true},
 			DataCenterInfo: DataCenterInfo{
 				Class: "com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo",
 				Name:  "MyOwn",
@@ -127,85 +145,56 @@ func main() {
 		},
 	}
 
-	// Serializar a JSON
 	jsonData, err := json.Marshal(instanceData)
 	if err != nil {
-		log.Fatalf("Failed to marshal instance data: %v", err)
+		log.Printf("❌ Failed to marshal instance data: %v", err)
+		return
 	}
 
-	// Registrar vía POST
 	registerURL := eurekaURL + "/apps/" + instanceData.Instance.App
 	log.Printf("🔍 Attempting to register at: %s", registerURL)
+
 	resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Printf("❌ Error registering with Eureka: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		log.Printf("✅ Service registered in Eureka as CODE-RUNNER-SERVICE at %s:%d", ip, port)
 	} else {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
-			log.Printf("✅ Service registered in Eureka as CODE_RUNNER_SERVICE at %s:%d", ip, portInt)
+		log.Printf("❌ Registration failed with status: %d", resp.StatusCode)
+		return
+	}
+
+	heartbeatURL := registerURL + "/" + instanceData.Instance.HostName
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		req, err := http.NewRequest("PUT", heartbeatURL, nil)
+		if err != nil {
+			log.Printf("❌ Failed to create heartbeat request: %v", err)
+			continue
+		}
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("❌ Heartbeat failed: %v", err)
+			continue
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+			log.Printf("💓 Heartbeat sent successfully to Eureka")
 		} else {
-			log.Printf("❌ Registration failed with status: %d", resp.StatusCode)
+			log.Printf("❌ Heartbeat failed with status: %d", resp.StatusCode)
 		}
 	}
-
-	// Iniciar goroutine para heartbeats
-	go func() {
-		heartbeatURL := registerURL + "/" + instanceData.Instance.HostName
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			req, err := http.NewRequest("PUT", heartbeatURL, nil)
-			if err != nil {
-				log.Printf("❌ Failed to create heartbeat request: %v", err)
-				continue
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				log.Printf("❌ Heartbeat failed: %v", err)
-			} else {
-				resp.Body.Close()
-				if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-					log.Printf("❌ Heartbeat failed with status: %d", resp.StatusCode)
-				}
-			}
-		}
-	}()
-
-	// Print startup information
-	log.Printf("🚀 Starting %s gRPC Server", config.App.Name)
-	log.Printf("📍 Port: %s", config.Server.GRPCPort)
-	log.Printf("🔧 Configuration: plaintext negotiation, 8MB max message size")
-	log.Printf("🌐 Client connection: static://localhost:%s", config.Server.GRPCPort)
-	log.Printf("🗄️  Database: %s:%s/%s", config.Database.Host, config.Database.Port, config.Database.Name)
-
-	// Print Kafka configuration
-	if config.Kafka.BootstrapServers != "" {
-		log.Printf("📨 Kafka: %s", config.Kafka.BootstrapServers)
-		log.Printf("📝 Topic: %s", config.Kafka.Topic)
-		log.Printf("👥 Consumer Group: %s", config.Kafka.ConsumerGroup)
-	}
-
-	// Print Service Discovery configuration
-	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
-		log.Printf("🔍 Service Discovery: %s", config.ServiceDiscovery.URL)
-	}
-
-	// Override with environment variable if set (for backward compatibility)
-	port := os.Getenv("GRPC_PORT")
-	if port == "" {
-		port = config.Server.GRPCPort
-	}
-	log.Printf("🔍 Eureka: Registered at %s", eurekaURL)
-
-	// Start gRPC server
-	if err := server.StartServer(port, database.GetDB()); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
-
-	log.Println("Server stopped")
 }
 
-// Función auxiliar para obtener la IP local
 func getLocalIP() (string, error) {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
