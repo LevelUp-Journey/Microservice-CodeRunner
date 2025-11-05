@@ -52,8 +52,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: coderunner-service
+    container_name: code-runner-service
+    hostname: code-runner-service
     restart: unless-stopped
+    privileged: true</parameter>
     privileged: true
     environment:
       # Application Configuration
@@ -77,8 +79,8 @@ services:
 
       # Service Discovery (Eureka)
       SERVICE_DISCOVERY_URL: ${SERVICE_DISCOVERY_URL}
-      SERVICE_PUBLIC_IP: ${SERVICE_PUBLIC_IP}
       SERVICE_NAME: ${SERVICE_NAME:-CODE-RUNNER-SERVICE}
+      HOSTNAME: code-runner-service</parameter>
 
       # Docker Configuration
       DOCKER_HOST: unix:///var/run/docker.sock
