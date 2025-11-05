@@ -72,6 +72,67 @@ psql -d coderunner -f migrations/001_create_execution_tables.sql
 - Email: admin@coderunner.local
 - Password: admin123
 
+## Service Discovery Integration
+
+This microservice integrates with **Eureka Service Discovery** for seamless communication with other microservices in Docker environments.
+
+### Key Features
+- ✅ Registers with Eureka using **hostname** (not IP) for Docker DNS compatibility
+- ✅ Compatible with Spring Boot microservices using `discovery:///` addressing
+- ✅ Automatic heartbeat every 30 seconds
+- ✅ Supports multi-service Docker Compose setups
+
+### Configuration
+
+```yaml
+# docker-compose.yml
+services:
+  code-runner-service:
+    container_name: code-runner-service
+    hostname: code-runner-service  # Must match container name
+    networks:
+      - microservices-network  # Shared network with other services
+    environment:
+      SERVICE_DISCOVERY_URL: http://service-discovery:8761/eureka
+      SERVICE_NAME: CODE-RUNNER-SERVICE
+      HOSTNAME: code-runner-service
+```
+
+### Connecting from Spring Boot
+
+```yaml
+# application.yml in other microservices
+grpc:
+  client:
+    code-runner:
+      address: discovery:///code-runner-service
+      negotiation-type: plaintext
+      max-inbound-message-size: 8MB
+```
+
+### Verification
+
+1. **Check Eureka Dashboard:** http://localhost:8761
+   - Should show: `CODE-RUNNER-SERVICE` with status `UP (1) - code-runner-service:9084`
+
+2. **Check Service Logs:**
+   ```bash
+   docker logs code-runner-service
+   ```
+   Look for:
+   ```
+   ✅ Service registered in Eureka as CODE-RUNNER-SERVICE at code-runner-service:9084
+   💓 Heartbeat sent successfully to Eureka
+   ```
+
+3. **Test Connectivity:**
+   ```bash
+   # From another microservice container
+   docker exec -it challenges-service curl http://code-runner-service:8084/health
+   ```
+
+📖 **For detailed integration guide, see [EUREKA_INTEGRATION.md](EUREKA_INTEGRATION.md)**
+
 ## Configuration
 
 ### Environment Variables
@@ -82,9 +143,10 @@ psql -d coderunner -f migrations/001_create_execution_tables.sql
 - `GRPC_PORT` - gRPC server port (default: 9084)
 - `PORT` - HTTP port for health checks (default: 8084)
 
-#### Service Discovery
-- `SERVICE_DISCOVERY_URL` - Eureka service discovery URL
-- `SERVICE_DISCOVERY_ENABLED` - Enable/disable service discovery (default: false)
+#### Service Discovery (Eureka)
+- `SERVICE_DISCOVERY_URL` - Eureka server URL (e.g., http://service-discovery:8761/eureka)
+- `SERVICE_NAME` - Service name in Eureka (default: "CODE-RUNNER-SERVICE")
+- `HOSTNAME` - Hostname for registration (must match container hostname)
 
 #### Kafka (Azure Event Hub)
 - `KAFKA_BOOTSTRAP_SERVERS` - Bootstrap servers (Azure Event Hub format)

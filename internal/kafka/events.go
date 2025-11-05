@@ -31,6 +31,7 @@ type CodeExecutionEvent struct {
 }
 
 // PublishChallengeCompleted publishes a challenge completed event to Kafka
+// Uses the default topic from configuration
 func (kc *KafkaClient) PublishChallengeCompleted(ctx context.Context, event *ChallengeCompletedEvent) error {
 	event.Timestamp = time.Now()
 
@@ -39,10 +40,23 @@ func (kc *KafkaClient) PublishChallengeCompleted(ctx context.Context, event *Cha
 		return err
 	}
 
-	return kc.ProduceMessage(ctx, event.ChallengeID, data)
+	return kc.ProduceMessageToDefaultTopic(ctx, event.ChallengeID, data)
+}
+
+// PublishChallengeCompletedToTopic publishes a challenge completed event to a specific topic
+func (kc *KafkaClient) PublishChallengeCompletedToTopic(ctx context.Context, topic string, event *ChallengeCompletedEvent) error {
+	event.Timestamp = time.Now()
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	return kc.ProduceMessage(ctx, topic, event.ChallengeID, data)
 }
 
 // PublishCodeExecution publishes a code execution event to Kafka
+// Uses the default topic from configuration
 func (kc *KafkaClient) PublishCodeExecution(ctx context.Context, event *CodeExecutionEvent) error {
 	event.Timestamp = time.Now()
 
@@ -51,5 +65,17 @@ func (kc *KafkaClient) PublishCodeExecution(ctx context.Context, event *CodeExec
 		return err
 	}
 
-	return kc.ProduceMessage(ctx, event.ExecutionID, data)
+	return kc.ProduceMessageToDefaultTopic(ctx, event.ExecutionID, data)
+}
+
+// PublishCodeExecutionToTopic publishes a code execution event to a specific topic
+func (kc *KafkaClient) PublishCodeExecutionToTopic(ctx context.Context, topic string, event *CodeExecutionEvent) error {
+	event.Timestamp = time.Now()
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	return kc.ProduceMessage(ctx, topic, event.ExecutionID, data)
 }

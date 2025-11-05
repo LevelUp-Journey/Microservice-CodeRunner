@@ -24,14 +24,67 @@
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Variables de entorno locales
 .env
+.env.local
+.env.*.local
+!.env.example
 
 # Códigos compilados de tests
 /compiled_test_codes/
 server
+
+# Docker
+docker-compose.override.yml
+.docker/
+*.pid
+*.seed
+*.pid.lock
+
+# Logs
+logs/
+*.log
+log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database
+postgres_data/
+pgdata/
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.backup
+*.bak
+
+# Test coverage
+coverage/
+*.cover
+htmlcov/
+.coverage
+
+# Temporary files
+temp/
+*.temp
+.cache/
+
+# Build artifacts
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

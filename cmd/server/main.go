@@ -74,25 +74,20 @@ func main() {
 	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
 		eurekaURL := strings.TrimRight(config.ServiceDiscovery.URL, "/")
 
-		// Preferir SERVICE_PUBLIC_IP si está configurada
-		var ip string
-		if config.ServiceDiscovery.PublicIP != "" {
-			ip = config.ServiceDiscovery.PublicIP
-			log.Printf("🌐 Using configured public IP: %s", ip)
-		} else {
-			// Intentar detectar IP pública automáticamente
-			detectedIP, err := getPublicIP()
-			if err != nil {
-				log.Printf("⚠️  Warning: Failed to get public IP: %v", err)
-				log.Printf("💡 Consider setting SERVICE_PUBLIC_IP environment variable")
-				ip = "localhost"
-			} else {
-				ip = detectedIP
-				log.Printf("🌐 Detected public IP: %s", ip)
-			}
+		// Determinar el hostname para registro en Eureka
+		hostname := os.Getenv("HOSTNAME")
+		if hostname == "" {
+			hostname = config.ServiceDiscovery.ServiceName
+			log.Printf("⚠️  Warning: HOSTNAME not set, using service name: %s", hostname)
 		}
 
-		go registerWithEureka(eurekaURL, ip, portInt, config.ServiceDiscovery.ServiceName)
+		// Construir el ID de instancia similar a Spring Boot
+		instanceID := fmt.Sprintf("%s:%d", hostname, portInt)
+
+		log.Printf("🌐 Using hostname: %s", hostname)
+		log.Printf("🔑 Instance ID: %s", instanceID)
+
+		go registerWithEureka(eurekaURL, hostname, portInt, config.ServiceDiscovery.ServiceName, instanceID)
 	} else {
 		log.Printf("ℹ️  Service Discovery is disabled")
 	}
@@ -120,7 +115,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
+func registerWithEureka(eurekaURL, hostname string, port int, serviceName string, instanceID string) {
 	type DataCenterInfo struct {
 		Class string `json:"@class"`
 		Name  string `json:"name"`
@@ -132,6 +127,7 @@ func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 	}
 
 	type Instance struct {
+		InstanceID     string         `json:"instanceId"`
 		HostName       string         `json:"hostName"`
 		App            string         `json:"app"`
 		IPAddr         string         `json:"ipAddr"`
@@ -139,20 +135,35 @@ func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 		Status         string         `json:"status"`
 		Port           PortInfo       `json:"port"`
 		DataCenterInfo DataCenterInfo `json:"dataCenterInfo"`
+		HomePageUrl    string         `json:"homePageUrl"`
+		StatusPageUrl  string         `json:"statusPageUrl"`
+		HealthCheckUrl string         `json:"healthCheckUrl"`
 	}
 
 	type EurekaRequest struct {
 		Instance Instance `json:"instance"`
 	}
 
+	// Obtener la IP local del contenedor para el campo ipAddr
+	ipAddr := hostname
+	if localIP, err := getLocalIP(); err == nil {
+		ipAddr = localIP
+	}
+
+	baseURL := fmt.Sprintf("http://%s:%d", hostname, port)
+
 	instanceData := EurekaRequest{
 		Instance: Instance{
-			HostName:   ip,
-			App:        serviceName,
-			IPAddr:     ip,
-			VipAddress: serviceName,
-			Status:     "UP",
-			Port:       PortInfo{Port: port, Enabled: true},
+			InstanceID:     instanceID,
+			HostName:       hostname,
+			App:            serviceName,
+			IPAddr:         ipAddr,
+			VipAddress:     serviceName,
+			Status:         "UP",
+			Port:           PortInfo{Port: port, Enabled: true},
+			HomePageUrl:    baseURL,
+			StatusPageUrl:  fmt.Sprintf("%s/actuator/info", baseURL),
+			HealthCheckUrl: fmt.Sprintf("%s/actuator/health", baseURL),
 			DataCenterInfo: DataCenterInfo{
 				Class: "com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo",
 				Name:  "MyOwn",
@@ -161,7 +172,9 @@ func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 	}
 
 	log.Printf("📝 Registering service with name: %s", instanceData.Instance.App)
-	log.Printf("📍 IP Address: %s", ip)
+	log.Printf("📍 Hostname: %s", hostname)
+	log.Printf("🆔 Instance ID: %s", instanceID)
+	log.Printf("🌐 IP Address: %s", ipAddr)
 	log.Printf("🔌 Port: %d", port)
 
 	jsonData, err := json.Marshal(instanceData)
@@ -181,13 +194,13 @@ func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		log.Printf("✅ Service registered in Eureka as %s at %s:%d", serviceName, ip, port)
+		log.Printf("✅ Service registered in Eureka as %s at %s:%d", serviceName, hostname, port)
 	} else {
 		log.Printf("❌ Registration failed with status: %d", resp.StatusCode)
 		return
 	}
 
-	heartbeatURL := registerURL + "/" + instanceData.Instance.HostName
+	heartbeatURL := registerURL + "/" + instanceID
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -212,54 +225,6 @@ func registerWithEureka(eurekaURL, ip string, port int, serviceName string) {
 			log.Printf("❌ Heartbeat failed with status: %d", resp.StatusCode)
 		}
 	}
-}
-
-// getPublicIP intenta detectar la IP pública del servidor
-// Primero intenta obtenerla de servicios externos, luego cae a detección local
-func getPublicIP() (string, error) {
-	// Método 1: Consultar servicio externo (ifconfig.me es rápido y confiable)
-	publicIP, err := getPublicIPFromService()
-	if err == nil && publicIP != "" {
-		return publicIP, nil
-	}
-
-	// Método 2: Fallback a detección local (puede ser IP privada en Docker/NAT)
-	return getLocalIP()
-}
-
-// getPublicIPFromService consulta un servicio externo para obtener la IP pública
-func getPublicIPFromService() (string, error) {
-	client := &http.Client{Timeout: 3 * time.Second}
-
-	// Intentar varios servicios en caso de que uno falle
-	services := []string{
-		"https://api.ipify.org",
-		"https://ifconfig.me/ip",
-		"https://icanhazip.com",
-	}
-
-	for _, service := range services {
-		resp, err := client.Get(service)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			body := make([]byte, 64)
-			n, err := resp.Body.Read(body)
-			if err != nil && err.Error() != "EOF" {
-				continue
-			}
-			ip := strings.TrimSpace(string(body[:n]))
-			// Validar que sea una IP válida
-			if netIP := net.ParseIP(ip); netIP != nil {
-				return ip, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("failed to get public IP from external services")
 }
 
 func getLocalIP() (string, error) {

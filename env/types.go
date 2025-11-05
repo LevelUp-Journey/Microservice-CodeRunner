@@ -63,4 +63,5 @@ type ServiceDiscoveryConfig struct {
 	Enabled     bool   `mapstructure:"SERVICE_DISCOVERY_ENABLED"`
 	PublicIP    string `mapstructure:"SERVICE_PUBLIC_IP"`
 	ServiceName string `mapstructure:"SERVICE_NAME"`
+	Hostname    string `mapstructure:"HOSTNAME"`
 }

@@ -26,54 +26,43 @@ func LoadConfig() (*Config, error) {
 			GRPCPort: getEnv("GRPC_PORT", "9084"),
 		},
 		Database: DatabaseConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "5432"),
-			User:     getEnv("DB_USER", "postgres"),
-			Password: getEnv("DB_PASSWORD", "postgres"),
-			Name:     getEnv("DB_NAME", "code_runner_db"),
-			SSLMode:  getEnv("DB_SSLMODE", "disable"),
-			Timezone: getEnv("DB_TIMEZONE", "UTC"),
+			Host:            getEnv("DB_HOST", "localhost"),
+			Port:            getEnv("DB_PORT", "5432"),
+			User:            getEnv("DB_USER", "postgres"),
+			Password:        getEnv("DB_PASSWORD", "postgres"),
+			Name:            getEnv("DB_NAME", "code_runner_db"),
+			SSLMode:         getEnv("DB_SSLMODE", "require"),
+			Timezone:        getEnv("DB_TIMEZONE", "UTC"),
+			MaxOpenConns:    25,
+			MaxIdleConns:    10,
+			ConnMaxLifetime: 3600 * time.Second,
 		},
 		Logging: LoggingConfig{
-			Level:  getEnv("LOG_LEVEL", "info"),
-			Format: getEnv("LOG_FORMAT", "json"),
+			Level:  "info",
+			Format: "json",
 		},
 		Kafka: KafkaConfig{
 			BootstrapServers:  getEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
 			ConnectionString:  getEnv("KAFKA_CONNECTION_STRING", ""),
-			Topic:             getEnv("KAFKA_TOPIC", "challenge.completed"),
-			ConsumerGroup:     getEnv("KAFKA_CONSUMER_GROUP", "code-runner-service"),
-			SASLMechanism:     getEnv("KAFKA_SASL_MECHANISM", "PLAIN"),
-			SecurityProtocol:  getEnv("KAFKA_SECURITY_PROTOCOL", "SASL_SSL"),
-			ProducerTimeoutMs: getEnvInt("KAFKA_PRODUCER_TIMEOUT_MS", 30000),
-			ConsumerTimeoutMs: getEnvInt("KAFKA_CONSUMER_TIMEOUT_MS", 30000),
-			MaxRetries:        getEnvInt("KAFKA_MAX_RETRIES", 3),
+			Topic:             "challenge.completed",
+			ConsumerGroup:     "code-runner-service",
+			SASLMechanism:     "PLAIN",
+			SecurityProtocol:  "SASL_SSL",
+			ProducerTimeoutMs: 30000,
+			ConsumerTimeoutMs: 30000,
+			MaxRetries:        3,
 		},
 		ServiceDiscovery: ServiceDiscoveryConfig{
 			URL:         getEnv("SERVICE_DISCOVERY_URL", ""),
-			Enabled:     getEnvBool("SERVICE_DISCOVERY_ENABLED", false),
+			Enabled:     false, // Will be set to true if URL is provided
 			PublicIP:    getEnv("SERVICE_PUBLIC_IP", ""),
 			ServiceName: getEnv("SERVICE_NAME", "CODE-RUNNER-SERVICE"),
 		},
 	}
 
-	// Parse database connection pool settings
-	if maxOpenConns := getEnv("DB_MAX_OPEN_CONNS", "25"); maxOpenConns != "" {
-		if val, err := strconv.Atoi(maxOpenConns); err == nil {
-			config.Database.MaxOpenConns = val
-		}
-	}
-
-	if maxIdleConns := getEnv("DB_MAX_IDLE_CONNS", "10"); maxIdleConns != "" {
-		if val, err := strconv.Atoi(maxIdleConns); err == nil {
-			config.Database.MaxIdleConns = val
-		}
-	}
-
-	if connMaxLifetime := getEnv("DB_CONN_MAX_LIFETIME", "3600"); connMaxLifetime != "" {
-		if val, err := strconv.Atoi(connMaxLifetime); err == nil {
-			config.Database.ConnMaxLifetime = time.Duration(val) * time.Second
-		}
+	// Auto-enable service discovery if URL is provided
+	if config.ServiceDiscovery.URL != "" {
+		config.ServiceDiscovery.Enabled = true
 	}
 
 	return config, nil
