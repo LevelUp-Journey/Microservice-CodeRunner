@@ -1,0 +1,125 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+README.md
+LICENSE
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test files
+*_test.go
+test/
+tests/
+testing/
+testdata/
+*.test
+coverage.out
+coverage.html
+
+# Build artifacts
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+server
+
+# Dependencies (will be downloaded during build)
+vendor/
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# Docker files (except needed ones)
+docker-compose*.yml
+docker-compose.override.yml
+Dockerfile.dev
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+
+# Protobuf generated files (if you regenerate them)
+# Uncomment if needed
+# *.pb.go
+
+# Examples and templates (if not needed in runtime)
+examples/
+example_*.go
+
+# Kubernetes/Helm
+k8s/
+helm/
+*.yaml
+*.yml
+!docker-compose.yml
+
+# Node modules (if any)
+node_modules/
+
+# Python cache (if any)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+protoc.zip
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+*.cover
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Large binary files
+*.iso
+*.dmg
