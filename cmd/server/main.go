@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"code-runner/internal/docker"
 	"code-runner/internal/kafka"
 	"code-runner/internal/server"
+	"code-runner/internal/utils"
 )
 
 func main() {
@@ -74,20 +74,24 @@ func main() {
 	if config.ServiceDiscovery.Enabled && config.ServiceDiscovery.URL != "" {
 		eurekaURL := strings.TrimRight(config.ServiceDiscovery.URL, "/")
 
-		// Determinar el hostname para registro en Eureka
-		hostname := os.Getenv("HOSTNAME")
-		if hostname == "" {
-			hostname = config.ServiceDiscovery.ServiceName
-			log.Printf("⚠️  Warning: HOSTNAME not set, using service name: %s", hostname)
+		// Obtener la IP pública de la máquina
+		publicIP, err := utils.GetPublicIP()
+		if err != nil {
+			log.Printf("❌ Failed to get public IP: %v", err)
+			log.Printf("⚠️  Service Discovery registration aborted")
+		} else {
+			// Obtener hostname para el instanceID
+			hostname := utils.GetHostname(config.ServiceDiscovery.ServiceName)
+
+			// Construir el ID de instancia similar a Spring Boot
+			instanceID := fmt.Sprintf("%s:%d", hostname, portInt)
+
+			log.Printf("🌐 Public IP: %s", publicIP)
+			log.Printf("🏷️  Hostname: %s", hostname)
+			log.Printf("🔑 Instance ID: %s", instanceID)
+
+			go registerWithEureka(eurekaURL, publicIP, portInt, config.ServiceDiscovery.ServiceName, instanceID, hostname)
 		}
-
-		// Construir el ID de instancia similar a Spring Boot
-		instanceID := fmt.Sprintf("%s:%d", hostname, portInt)
-
-		log.Printf("🌐 Using hostname: %s", hostname)
-		log.Printf("🔑 Instance ID: %s", instanceID)
-
-		go registerWithEureka(eurekaURL, hostname, portInt, config.ServiceDiscovery.ServiceName, instanceID)
 	} else {
 		log.Printf("ℹ️  Service Discovery is disabled")
 	}
@@ -115,7 +119,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func registerWithEureka(eurekaURL, hostname string, port int, serviceName string, instanceID string) {
+func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string, instanceID string, hostname string) {
 	type DataCenterInfo struct {
 		Class string `json:"@class"`
 		Name  string `json:"name"`
@@ -144,20 +148,15 @@ func registerWithEureka(eurekaURL, hostname string, port int, serviceName string
 		Instance Instance `json:"instance"`
 	}
 
-	// Obtener la IP local del contenedor para el campo ipAddr
-	ipAddr := hostname
-	if localIP, err := getLocalIP(); err == nil {
-		ipAddr = localIP
-	}
-
-	baseURL := fmt.Sprintf("http://%s:%d", hostname, port)
+	// Usar la IP pública como dirección principal
+	baseURL := fmt.Sprintf("http://%s:%d", publicIP, port)
 
 	instanceData := EurekaRequest{
 		Instance: Instance{
 			InstanceID:     instanceID,
 			HostName:       hostname,
 			App:            serviceName,
-			IPAddr:         ipAddr,
+			IPAddr:         publicIP, // Usar IP pública aquí
 			VipAddress:     serviceName,
 			Status:         "UP",
 			Port:           PortInfo{Port: port, Enabled: true},
@@ -174,7 +173,7 @@ func registerWithEureka(eurekaURL, hostname string, port int, serviceName string
 	log.Printf("📝 Registering service with name: %s", instanceData.Instance.App)
 	log.Printf("📍 Hostname: %s", hostname)
 	log.Printf("🆔 Instance ID: %s", instanceID)
-	log.Printf("🌐 IP Address: %s", ipAddr)
+	log.Printf("🌐 Public IP Address: %s", publicIP)
 	log.Printf("🔌 Port: %d", port)
 
 	jsonData, err := json.Marshal(instanceData)
@@ -225,14 +224,4 @@ func registerWithEureka(eurekaURL, hostname string, port int, serviceName string
 			log.Printf("❌ Heartbeat failed with status: %d", resp.StatusCode)
 		}
 	}
-}
-
-func getLocalIP() (string, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String(), nil
 }

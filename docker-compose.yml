@@ -80,7 +80,8 @@ services:
       # Service Discovery (Eureka)
       SERVICE_DISCOVERY_URL: ${SERVICE_DISCOVERY_URL}
       SERVICE_NAME: ${SERVICE_NAME:-CODE-RUNNER-SERVICE}
-      HOSTNAME: code-runner-service</parameter>
+      HOSTNAME: ${HOSTNAME:-code-runner-service}
+      SERVICE_PUBLIC_IP: ${SERVICE_PUBLIC_IP}</parameter>
 
       # Docker Configuration
       DOCKER_HOST: unix:///var/run/docker.sock
