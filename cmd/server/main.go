@@ -183,6 +183,7 @@ func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string
 	}
 
 	registerURL := eurekaURL + "/apps/" + instanceData.Instance.App
+	log.Printf("📡 Registrándose a service discovery con la IP: %s", publicIP)
 	log.Printf("🔍 Attempting to register at: %s", registerURL)
 
 	resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(jsonData))
