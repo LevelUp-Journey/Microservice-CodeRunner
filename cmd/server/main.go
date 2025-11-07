@@ -80,17 +80,17 @@ func main() {
 			log.Printf("❌ Failed to get public IP: %v", err)
 			log.Printf("⚠️  Service Discovery registration aborted")
 		} else {
-			// Obtener hostname para el instanceID
+			// Obtener hostname solo para referencia (opcional)
 			hostname := utils.GetHostname(config.ServiceDiscovery.ServiceName)
 
-			// Construir el ID de instancia similar a Spring Boot
-			instanceID := fmt.Sprintf("%s:%d", hostname, portInt)
+			// Construir el ID de instancia usando IP pública para que sea accesible desde otros servicios
+			instanceID := fmt.Sprintf("%s:%d", publicIP, portInt)
 
 			log.Printf("🌐 Public IP: %s", publicIP)
 			log.Printf("🏷️  Hostname: %s", hostname)
 			log.Printf("🔑 Instance ID: %s", instanceID)
 
-			go registerWithEureka(eurekaURL, publicIP, portInt, config.ServiceDiscovery.ServiceName, instanceID, hostname)
+			go registerWithEureka(eurekaURL, publicIP, portInt, config.ServiceDiscovery.ServiceName, instanceID, publicIP)
 		}
 	} else {
 		log.Printf("ℹ️  Service Discovery is disabled")
@@ -119,7 +119,7 @@ func main() {
 	log.Println("Server stopped")
 }
 
-func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string, instanceID string, hostname string) {
+func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string, instanceID string, ipAddress string) {
 	type DataCenterInfo struct {
 		Class string `json:"@class"`
 		Name  string `json:"name"`
@@ -154,7 +154,7 @@ func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string
 	instanceData := EurekaRequest{
 		Instance: Instance{
 			InstanceID:     instanceID,
-			HostName:       hostname,
+			HostName:       ipAddress, // Usar IP pública para que sea accesible
 			App:            serviceName,
 			IPAddr:         publicIP, // Usar IP pública aquí
 			VipAddress:     serviceName,
@@ -171,7 +171,7 @@ func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string
 	}
 
 	log.Printf("📝 Registering service with name: %s", instanceData.Instance.App)
-	log.Printf("📍 Hostname: %s", hostname)
+	log.Printf("📍 IP Address (hostname): %s", ipAddress)
 	log.Printf("🆔 Instance ID: %s", instanceID)
 	log.Printf("🌐 Public IP Address: %s", publicIP)
 	log.Printf("🔌 Port: %d", port)
@@ -194,7 +194,7 @@ func registerWithEureka(eurekaURL, publicIP string, port int, serviceName string
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		log.Printf("✅ Service registered in Eureka as %s at %s:%d", serviceName, hostname, port)
+		log.Printf("✅ Service registered in Eureka as %s at %s:%d", serviceName, ipAddress, port)
 	} else {
 		log.Printf("❌ Registration failed with status: %d", resp.StatusCode)
 		return
