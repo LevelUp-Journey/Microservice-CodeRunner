@@ -48,6 +48,7 @@ type LoggingConfig struct {
 type KafkaConfig struct {
 	BootstrapServers  string `mapstructure:"KAFKA_BOOTSTRAP_SERVERS"`
 	ConnectionString  string `mapstructure:"KAFKA_CONNECTION_STRING"`
+	UseSASL           bool   `mapstructure:"KAFKA_USE_SASL"`
 	Topic             string `mapstructure:"KAFKA_TOPIC"`
 	ConsumerGroup     string `mapstructure:"KAFKA_CONSUMER_GROUP"`
 	SASLMechanism     string `mapstructure:"KAFKA_SASL_MECHANISM"`

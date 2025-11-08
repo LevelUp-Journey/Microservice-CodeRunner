@@ -82,8 +82,9 @@ func publishCodeExecutionExample(client *kafka.KafkaClient) {
 }
 
 func consumeMessagesExample(client *kafka.KafkaClient) {
-	// Initialize consumer
-	err := client.InitConsumer()
+	// Initialize consumer for a specific topic
+	topic := "challenge.completed"
+	err := client.InitConsumer(topic)
 	if err != nil {
 		log.Printf("❌ Failed to initialize consumer: %v", err)
 		return
