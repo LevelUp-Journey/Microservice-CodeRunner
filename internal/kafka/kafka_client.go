@@ -51,8 +51,20 @@ func NewKafkaClient(config *env.KafkaConfig) (*KafkaClient, error) {
 	return client, nil
 }
 
-// initDialer initializes the Kafka dialer with SASL/SSL configuration
+// initDialer initializes the Kafka dialer with or without SASL/SSL configuration
 func (kc *KafkaClient) initDialer() error {
+	// Check if SASL authentication is required
+	if !kc.config.UseSASL {
+		// Local Kafka without authentication
+		kc.dialer = &kafka.Dialer{
+			Timeout:   10 * time.Second,
+			DualStack: true,
+		}
+		log.Printf("🔓 Kafka client configured for local mode (no SASL)")
+		return nil
+	}
+
+	// Azure Event Hub / SASL mode
 	// Parse connection string to get credentials
 	username, password, err := parseConnectionString(kc.config.ConnectionString)
 	if err != nil {
@@ -73,40 +85,51 @@ func (kc *KafkaClient) initDialer() error {
 		TLS:           &tls.Config{},
 	}
 
+	log.Printf("🔐 Kafka client configured for SASL/SSL mode (Azure Event Hub)")
 	return nil
 }
 
 // initProducer initializes the Kafka producer without a specific topic
 func (kc *KafkaClient) initProducer() error {
-	// Parse connection string to get credentials
-	username, password, err := parseConnectionString(kc.config.ConnectionString)
-	if err != nil {
-		return fmt.Errorf("failed to parse connection string: %w", err)
-	}
-
-	// Create SASL mechanism
-	mechanism := plain.Mechanism{
-		Username: username,
-		Password: password,
-	}
-
-	// Create writer (producer) without topic (will specify per message)
-	kc.writer = &kafka.Writer{
-		Addr:         kafka.TCP(kc.config.BootstrapServers),
-		Balancer:     &kafka.LeastBytes{},
-		WriteTimeout: time.Duration(kc.config.ProducerTimeoutMs) * time.Millisecond,
-		ReadTimeout:  time.Duration(kc.config.ProducerTimeoutMs) * time.Millisecond,
-		Transport: &kafka.Transport{
-			SASL: mechanism,
-			TLS:  &tls.Config{},
-			Dial: kc.dialer.DialFunc,
-		},
+	writerConfig := kafka.Writer{
+		Addr:                   kafka.TCP(kc.config.BootstrapServers),
+		Balancer:               &kafka.LeastBytes{},
+		WriteTimeout:           time.Duration(kc.config.ProducerTimeoutMs) * time.Millisecond,
+		ReadTimeout:            time.Duration(kc.config.ProducerTimeoutMs) * time.Millisecond,
 		MaxAttempts:            kc.config.MaxRetries,
 		RequiredAcks:           kafka.RequireAll,
 		Compression:            kafka.Snappy,
 		AllowAutoTopicCreation: true, // Allow automatic topic creation
 	}
 
+	// Configure transport based on SASL mode
+	if kc.config.UseSASL {
+		// Parse connection string to get credentials
+		username, password, err := parseConnectionString(kc.config.ConnectionString)
+		if err != nil {
+			return fmt.Errorf("failed to parse connection string: %w", err)
+		}
+
+		// Create SASL mechanism
+		mechanism := plain.Mechanism{
+			Username: username,
+			Password: password,
+		}
+
+		// Add SASL/TLS transport
+		writerConfig.Transport = &kafka.Transport{
+			SASL: mechanism,
+			TLS:  &tls.Config{},
+			Dial: kc.dialer.DialFunc,
+		}
+	} else {
+		// Local mode without SASL
+		writerConfig.Transport = &kafka.Transport{
+			Dial: kc.dialer.DialFunc,
+		}
+	}
+
+	kc.writer = &writerConfig
 	kc.producer = kc.writer
 
 	return nil

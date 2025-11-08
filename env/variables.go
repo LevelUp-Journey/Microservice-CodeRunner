@@ -44,6 +44,7 @@ func LoadConfig() (*Config, error) {
 		Kafka: KafkaConfig{
 			BootstrapServers:  getEnv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
 			ConnectionString:  getEnv("KAFKA_CONNECTION_STRING", ""),
+			UseSASL:           getEnvBool("KAFKA_USE_SASL", false),
 			Topic:             "challenge.completed",
 			ConsumerGroup:     "code-runner-service",
 			SASLMechanism:     "PLAIN",
