@@ -17,9 +17,9 @@ type Executor interface {
 
 // DockerExecutor implementa Executor usando Docker
 type DockerExecutor struct {
-	client       *client.Client
-	dockerConfig *DockerConfig
-	parser       TestResultParser
+	client        *client.Client
+	dockerConfig  *DockerConfig
+	parserFactory *ParserFactory
 }
 
 // NewDockerExecutor crea una nueva instancia de DockerExecutor
@@ -29,10 +29,13 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 		return nil, fmt.Errorf("failed to create Docker client: %w", err)
 	}
 
+	dockerConfig := DefaultDockerConfig()
+	parserFactory := DefaultParserFactory()
+
 	return &DockerExecutor{
-		client:       cli,
-		dockerConfig: DefaultDockerConfig(),
-		parser:       NewDoctestParser(),
+		client:        cli,
+		dockerConfig:  dockerConfig,
+		parserFactory: parserFactory,
 	}, nil
 }
 

@@ -12,6 +12,10 @@ import (
 type TestResultParser interface {
 	// Parse analiza el output de ejecución y retorna resultados detallados por test
 	Parse(output string, testIDs []string) ([]TestResult, error)
+	// CanParse indica si la estrategia puede manejar el lenguaje solicitado
+	CanParse(language string) bool
+	// DetectsOutput indica si la estrategia reconoce el formato del output de pruebas
+	DetectsOutput(output string) bool
 }
 
 // DoctestParser implementa TestResultParser para doctest (C++)
@@ -20,6 +24,15 @@ type DoctestParser struct{}
 // NewDoctestParser crea una nueva instancia del parser para doctest
 func NewDoctestParser() *DoctestParser {
 	return &DoctestParser{}
+}
+
+// CanParse indica si este parser soporta el lenguaje dado
+func (p *DoctestParser) CanParse(language string) bool {
+	return strings.EqualFold(language, "cpp") || strings.EqualFold(language, "c++")
+}
+
+func (p *DoctestParser) DetectsOutput(output string) bool {
+	return strings.Contains(output, "[doctest] test cases:")
 }
 
 // Parse implementa el parsing robusto de output de doctest

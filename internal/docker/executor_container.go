@@ -76,15 +76,21 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 
 	e.logExecutionResults(result)
 
-	// Only parse test results if compilation succeeded
-	if exitCode == 0 {
-		testResults, err := e.parser.Parse(result.StdOut, config.TestIDs)
+	parser, parserErr := e.parserFactory.GetParserForLanguage(config.Language)
+	if parserErr != nil {
+		log.Printf("  ⚠️  Warning: no parser strategy for language %s: %v", config.Language, parserErr)
+	}
+
+	parsed := false
+	if parser != nil && parser.DetectsOutput(result.StdOut) {
+		testResults, err := parser.Parse(result.StdOut, config.TestIDs)
 		if err != nil {
 			log.Printf("  ⚠️  Warning: Error parsing test results: %v", err)
 			// Fallback: mark all as failed
 			result.TotalTests = len(config.TestIDs)
 			result.PassedTests = 0
 			result.FailedTests = len(config.TestIDs)
+			result.TestResults = make([]TestResult, 0, len(config.TestIDs))
 			for _, testID := range config.TestIDs {
 				result.TestResults = append(result.TestResults, TestResult{
 					TestID:       testID,
@@ -93,6 +99,7 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 					ErrorMessage: "Parsing failed",
 				})
 			}
+			parsed = true
 		} else {
 			result.TestResults = testResults
 			result.TotalTests = len(testResults)
@@ -105,8 +112,15 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 					result.FailedTests++
 				}
 			}
+			parsed = true
 		}
-	} else {
+	}
+
+	if parsed {
+		result.Success = (exitCode == 0) && result.FailedTests == 0 && result.TotalTests > 0
+	}
+
+	if !parsed && exitCode != 0 {
 		// Compilation or runtime error - detect error type
 		e.detectErrorType(result)
 	}
