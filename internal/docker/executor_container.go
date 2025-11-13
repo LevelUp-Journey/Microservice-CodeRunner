@@ -210,19 +210,35 @@ func (e *DockerExecutor) captureLogs(ctx context.Context, containerID string) (s
 	return stdout.String(), stderr.String(), nil
 }
 
-// detectErrorType detecta el tipo de error basándose en stderr
+// detectErrorType detecta el tipo de error basándose en stderr con mejor clasificación
 func (e *DockerExecutor) detectErrorType(result *ExecutionResult) {
 	stderr := result.StdErr
+	lines := strings.Split(stderr, "\n")
 
-	// Detectar errores de compilación
+	// Detectar errores de compilación con clasificación más detallada
 	if strings.Contains(stderr, "error:") || strings.Contains(stderr, "fatal error:") {
 		result.ErrorType = "compilation_error"
 
-		// Extraer el primer error de compilación como mensaje
-		lines := strings.Split(stderr, "\n")
+		// Buscar el primer error específico
 		for _, line := range lines {
+			line = strings.TrimSpace(line)
 			if strings.Contains(line, "error:") {
-				result.ErrorMessage = strings.TrimSpace(line)
+				// Clasificar el tipo de error de compilación
+				if strings.Contains(line, "expected") || strings.Contains(line, "syntax error") {
+					result.ErrorType = "syntax_error"
+					result.ErrorMessage = fmt.Sprintf("Syntax error: %s", line)
+				} else if strings.Contains(line, "undefined reference") {
+					result.ErrorType = "linking_error"
+					result.ErrorMessage = fmt.Sprintf("Linking error: %s", line)
+				} else if strings.Contains(line, "no matching function") || strings.Contains(line, "cannot convert") {
+					result.ErrorType = "type_error"
+					result.ErrorMessage = fmt.Sprintf("Type error: %s", line)
+				} else if strings.Contains(line, "redeclared") || strings.Contains(line, "redefinition") {
+					result.ErrorType = "redeclaration_error"
+					result.ErrorMessage = fmt.Sprintf("Redeclaration error: %s", line)
+				} else {
+					result.ErrorMessage = fmt.Sprintf("Compilation error: %s", line)
+				}
 				break
 			}
 		}
@@ -231,7 +247,7 @@ func (e *DockerExecutor) detectErrorType(result *ExecutionResult) {
 			result.ErrorMessage = "Compilation failed - see stderr for details"
 		}
 
-		log.Printf("  🔴 COMPILATION ERROR DETECTED")
+		log.Printf("  🔴 %s DETECTED", strings.ToUpper(result.ErrorType))
 		log.Printf("  📝 Error: %s", result.ErrorMessage)
 
 		// No tests passed if compilation failed
@@ -241,7 +257,7 @@ func (e *DockerExecutor) detectErrorType(result *ExecutionResult) {
 		return
 	}
 
-	// Detectar errores de runtime
+	// Detectar errores de runtime con más casos
 	if strings.Contains(stderr, "Segmentation fault") || strings.Contains(stderr, "core dumped") {
 		result.ErrorType = "runtime_error"
 		result.ErrorMessage = "Runtime error: Segmentation fault"
@@ -249,10 +265,34 @@ func (e *DockerExecutor) detectErrorType(result *ExecutionResult) {
 		return
 	}
 
-	// Error genérico
-	result.ErrorType = "execution_error"
-	result.ErrorMessage = "Execution failed - see stderr for details"
-	log.Printf("  🔴 EXECUTION ERROR")
+	if strings.Contains(stderr, "Floating point exception") {
+		result.ErrorType = "runtime_error"
+		result.ErrorMessage = "Runtime error: Floating point exception"
+		log.Printf("  🔴 RUNTIME ERROR: Floating point exception")
+		return
+	}
+
+	if strings.Contains(stderr, "Aborted") || strings.Contains(stderr, "abort") {
+		result.ErrorType = "runtime_error"
+		result.ErrorMessage = "Runtime error: Program aborted"
+		log.Printf("  🔴 RUNTIME ERROR: Program aborted")
+		return
+	}
+
+	// Detectar errores de tiempo de ejecución en tests (si no hay compilación)
+	if result.TotalTests > 0 && result.FailedTests > 0 && result.ErrorType == "" {
+		result.ErrorType = "test_failure"
+		result.ErrorMessage = "Some tests failed - check test results"
+		log.Printf("  🔴 TEST FAILURE: %d/%d tests failed", result.FailedTests, result.TotalTests)
+		return
+	}
+
+	// Error genérico si no se clasificó
+	if result.ErrorType == "" {
+		result.ErrorType = "execution_error"
+		result.ErrorMessage = "Execution failed - see stderr for details"
+		log.Printf("  🔴 EXECUTION ERROR")
+	}
 }
 
 // Cleanup limpia recursos del contenedor

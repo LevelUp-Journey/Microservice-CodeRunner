@@ -7,11 +7,12 @@
 package proto
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -29,6 +30,7 @@ type ExecutionRequest struct {
 	StudentId     string                 `protobuf:"bytes,3,opt,name=student_id,json=studentId,proto3" json:"student_id,omitempty"`
 	Code          string                 `protobuf:"bytes,4,opt,name=code,proto3" json:"code,omitempty"`
 	Tests         []*TestCase            `protobuf:"bytes,5,rep,name=tests,proto3" json:"tests,omitempty"`
+	Language      string                 `protobuf:"bytes,6,opt,name=language,proto3" json:"language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,6 +100,14 @@ func (x *ExecutionRequest) GetTests() []*TestCase {
 	return nil
 }
 
+func (x *ExecutionRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *ExecutionResponse) GetApprovedTests() []string {
 // Test case definition
 type TestCase struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
@@ -261,13 +271,6 @@ func (x *ExecutionResponse) GetSuccess() bool {
 		return x.Success
 	}
 	return false
-}
-
-func (x *ExecutionResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
 }
 
 func (x *ExecutionResponse) GetErrorMessage() string {
