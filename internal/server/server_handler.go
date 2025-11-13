@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	pb "code-runner/api/gen"
+	pb "code-runner/api/gen/proto"
 	"code-runner/internal/database/models"
 	"code-runner/internal/docker"
 	"code-runner/internal/types"

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v6.33.0
-// source: code_runner.proto
+// source: api/proto/code_runner.proto
 
 package proto
 
@@ -36,7 +36,7 @@ type ExecutionRequest struct {
 
 func (x *ExecutionRequest) Reset() {
 	*x = ExecutionRequest{}
-	mi := &file_code_runner_proto_msgTypes[0]
+	mi := &file_api_proto_code_runner_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +48,7 @@ func (x *ExecutionRequest) String() string {
 func (*ExecutionRequest) ProtoMessage() {}
 
 func (x *ExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_code_runner_proto_msgTypes[0]
+	mi := &file_api_proto_code_runner_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +61,7 @@ func (x *ExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionRequest.ProtoReflect.Descriptor instead.
 func (*ExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_code_runner_proto_rawDescGZIP(), []int{0}
+	return file_api_proto_code_runner_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ExecutionRequest) GetChallengeId() string {
@@ -119,7 +119,7 @@ type TestCase struct {
 
 func (x *TestCase) Reset() {
 	*x = TestCase{}
-	mi := &file_code_runner_proto_msgTypes[1]
+	mi := &file_api_proto_code_runner_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -131,7 +131,7 @@ func (x *TestCase) String() string {
 func (*TestCase) ProtoMessage() {}
 
 func (x *TestCase) ProtoReflect() protoreflect.Message {
-	mi := &file_code_runner_proto_msgTypes[1]
+	mi := &file_api_proto_code_runner_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -144,7 +144,7 @@ func (x *TestCase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCase.ProtoReflect.Descriptor instead.
 func (*TestCase) Descriptor() ([]byte, []int) {
-	return file_code_runner_proto_rawDescGZIP(), []int{1}
+	return file_api_proto_code_runner_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TestCase) GetCodeVersionTestId() string {
@@ -194,7 +194,7 @@ type ExecutionResponse struct {
 
 func (x *ExecutionResponse) Reset() {
 	*x = ExecutionResponse{}
-	mi := &file_code_runner_proto_msgTypes[2]
+	mi := &file_api_proto_code_runner_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +206,7 @@ func (x *ExecutionResponse) String() string {
 func (*ExecutionResponse) ProtoMessage() {}
 
 func (x *ExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_code_runner_proto_msgTypes[2]
+	mi := &file_api_proto_code_runner_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +219,7 @@ func (x *ExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionResponse.ProtoReflect.Descriptor instead.
 func (*ExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_code_runner_proto_rawDescGZIP(), []int{2}
+	return file_api_proto_code_runner_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ExecutionResponse) GetApprovedTests() []string {
@@ -292,11 +292,11 @@ func (x *ExecutionResponse) GetErrorType() string {
 	return ""
 }
 
-var File_code_runner_proto protoreflect.FileDescriptor
+var File_api_proto_code_runner_proto protoreflect.FileDescriptor
 
-const file_code_runner_proto_rawDesc = "" +
+const file_api_proto_code_runner_proto_rawDesc = "" +
 	"\n" +
-	"\x11code_runner.proto\x12\x1dcom.levelupjourney.coderunner\"\xeb\x01\n" +
+	"\x1bapi/proto/code_runner.proto\x12\x1dcom.levelupjourney.coderunner\"\xeb\x01\n" +
 	"\x10ExecutionRequest\x12!\n" +
 	"\fchallenge_id\x18\x01 \x01(\tR\vchallengeId\x12&\n" +
 	"\x0fcode_version_id\x18\x02 \x01(\tR\rcodeVersionId\x12\x1d\n" +
@@ -329,24 +329,24 @@ const file_code_runner_proto_rawDesc = "" +
 	"Ccom.levelupjourney.microservicechallenges.solutions.interfaces.grpcB\x12CodeExecutionProtoP\x01Z\x19code-runner/api/gen/protob\x06proto3"
 
 var (
-	file_code_runner_proto_rawDescOnce sync.Once
-	file_code_runner_proto_rawDescData []byte
+	file_api_proto_code_runner_proto_rawDescOnce sync.Once
+	file_api_proto_code_runner_proto_rawDescData []byte
 )
 
-func file_code_runner_proto_rawDescGZIP() []byte {
-	file_code_runner_proto_rawDescOnce.Do(func() {
-		file_code_runner_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_code_runner_proto_rawDesc), len(file_code_runner_proto_rawDesc)))
+func file_api_proto_code_runner_proto_rawDescGZIP() []byte {
+	file_api_proto_code_runner_proto_rawDescOnce.Do(func() {
+		file_api_proto_code_runner_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_code_runner_proto_rawDesc), len(file_api_proto_code_runner_proto_rawDesc)))
 	})
-	return file_code_runner_proto_rawDescData
+	return file_api_proto_code_runner_proto_rawDescData
 }
 
-var file_code_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_code_runner_proto_goTypes = []any{
+var file_api_proto_code_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_api_proto_code_runner_proto_goTypes = []any{
 	(*ExecutionRequest)(nil),  // 0: com.levelupjourney.coderunner.ExecutionRequest
 	(*TestCase)(nil),          // 1: com.levelupjourney.coderunner.TestCase
 	(*ExecutionResponse)(nil), // 2: com.levelupjourney.coderunner.ExecutionResponse
 }
-var file_code_runner_proto_depIdxs = []int32{
+var file_api_proto_code_runner_proto_depIdxs = []int32{
 	1, // 0: com.levelupjourney.coderunner.ExecutionRequest.tests:type_name -> com.levelupjourney.coderunner.TestCase
 	0, // 1: com.levelupjourney.coderunner.SolutionEvaluationService.EvaluateSolution:input_type -> com.levelupjourney.coderunner.ExecutionRequest
 	2, // 2: com.levelupjourney.coderunner.SolutionEvaluationService.EvaluateSolution:output_type -> com.levelupjourney.coderunner.ExecutionResponse
@@ -357,26 +357,26 @@ var file_code_runner_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_code_runner_proto_init() }
-func file_code_runner_proto_init() {
-	if File_code_runner_proto != nil {
+func init() { file_api_proto_code_runner_proto_init() }
+func file_api_proto_code_runner_proto_init() {
+	if File_api_proto_code_runner_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_code_runner_proto_rawDesc), len(file_code_runner_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_code_runner_proto_rawDesc), len(file_api_proto_code_runner_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_code_runner_proto_goTypes,
-		DependencyIndexes: file_code_runner_proto_depIdxs,
-		MessageInfos:      file_code_runner_proto_msgTypes,
+		GoTypes:           file_api_proto_code_runner_proto_goTypes,
+		DependencyIndexes: file_api_proto_code_runner_proto_depIdxs,
+		MessageInfos:      file_api_proto_code_runner_proto_msgTypes,
 	}.Build()
-	File_code_runner_proto = out.File
-	file_code_runner_proto_goTypes = nil
-	file_code_runner_proto_depIdxs = nil
+	File_api_proto_code_runner_proto = out.File
+	file_api_proto_code_runner_proto_goTypes = nil
+	file_api_proto_code_runner_proto_depIdxs = nil
 }
