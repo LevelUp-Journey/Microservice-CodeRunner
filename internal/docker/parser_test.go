@@ -154,6 +154,9 @@ func TestDoctestParser_Parse_QuotedTestNames(t *testing.T) {
 	// Test with quoted test names
 	output := `[doctest] doctest version is "2.4.11"
 [doctest] TEST CASE: "test-uuid-1"
+/workspace/solution.cpp:12: CHECK( add(2, 3) == 6 ) is NOT correct!
+  values: CHECK( 5 == 6 )
+===============================================================================
 [doctest] test cases: 1 | 0 passed | 1 failed
 [doctest] assertions: 1 | 0 passed | 1 failed
 [doctest] Status: FAILURE
@@ -168,5 +171,48 @@ func TestDoctestParser_Parse_QuotedTestNames(t *testing.T) {
 
 	if len(results) != 1 || results[0].Passed {
 		t.Errorf("Expected test to fail")
+	}
+}
+
+func TestDoctestParser_Parse_UnprefixedTestCase(t *testing.T) {
+	parser := NewDoctestParser()
+
+	output := `[doctest] doctest version is "2.4.11"
+solution.cpp:27:
+TEST CASE:  6d801fc5-4563-4cc3-a546-e444dade79f9
+
+solution.cpp:28: ERROR: CHECK( addOne(-2) == -3 ) is NOT correct!
+  values: CHECK( 0 == -3 )
+
+===============================================================================
+[doctest] test cases: 3 | 2 passed | 1 failed | 0 skipped
+[doctest] assertions: 3 | 2 passed | 1 failed |
+[doctest] Status: FAILURE!
+===============================================================================`
+
+	testIDs := []string{"test-uuid-1", "6d801fc5-4563-4cc3-a546-e444dade79f9", "test-uuid-3"}
+
+	results, err := parser.Parse(output, testIDs)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(results) != len(testIDs) {
+		t.Fatalf("Expected %d results, got %d", len(testIDs), len(results))
+	}
+
+	if !results[0].Passed {
+		t.Errorf("Expected test %s to pass", results[0].TestID)
+	}
+
+	if results[1].Passed {
+		t.Errorf("Expected test %s to fail", results[1].TestID)
+	}
+	if !strings.Contains(results[1].ErrorMessage, "is NOT correct!") {
+		t.Errorf("Expected detailed failure message, got: %s", results[1].ErrorMessage)
+	}
+
+	if !results[2].Passed {
+		t.Errorf("Expected test %s to pass", results[2].TestID)
 	}
 }

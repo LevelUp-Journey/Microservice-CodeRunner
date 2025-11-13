@@ -41,58 +41,96 @@ func (p *DoctestParser) Parse(output string, testIDs []string) ([]TestResult, er
 
 	// Maps para tracking
 	failedTests := make(map[string]bool)
+	failureMessages := make(map[string][]string)
 	testResults := make([]TestResult, 0, len(testIDs))
 
 	// Regex patterns para doctest output
-	testCasePattern := regexp.MustCompile(`\[doctest\]\s+TEST CASE:\s+(.+)`)
+	testCasePattern := regexp.MustCompile(`(?i)(?:\[doctest\]\s+)?TEST CASE:\s+(.+)`)
 	summaryPattern := regexp.MustCompile(`\[doctest\]\s+test cases:\s+(\d+)\s*\|\s*(\d+)\s+passed\s*\|\s*(\d+)\s+failed`)
+	failurePattern := regexp.MustCompile(`(?i)(?:ERROR:\s+)?CHECK\(.+\)\s+is NOT correct!`)
 
 	var totalTests, passedTests, failedTestsCount int
+	var currentTest string
+	var summaryDetected bool
+	var captureActive bool
+	var captureKey string
 
 	// Parse line by line
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
 
-		// Detect test case failures
-		if matches := testCasePattern.FindStringSubmatch(line); len(matches) > 1 {
-			testName := strings.TrimSpace(matches[1])
-			// Remove quotes if present
-			testName = strings.Trim(testName, `"`)
-			failedTests[testName] = true
+		if line == "" {
+			captureActive = false
+			continue
 		}
 
-		// Parse final summary
+		if matches := testCasePattern.FindStringSubmatch(line); len(matches) > 1 {
+			testName := strings.TrimSpace(matches[1])
+			testName = strings.Trim(testName, `"`)
+			currentTest = testName
+			captureActive = false
+			continue
+		}
+
+		if captureActive {
+			if strings.HasPrefix(line, "[doctest]") ||
+				strings.HasPrefix(line, "TEST CASE:") ||
+				strings.HasPrefix(line, "===============================================================================") {
+				captureActive = false
+			} else if captureKey != "" {
+				failureMessages[captureKey] = append(failureMessages[captureKey], line)
+				continue
+			}
+		}
+
+		if failurePattern.MatchString(line) {
+			if currentTest != "" {
+				captureKey = normalizeTestIdentifier(currentTest)
+				failedTests[captureKey] = true
+				failureMessages[captureKey] = append(failureMessages[captureKey], line)
+				captureActive = true
+			}
+			continue
+		}
+
 		if matches := summaryPattern.FindStringSubmatch(line); len(matches) == 4 {
 			if t, err := strconv.Atoi(matches[1]); err == nil {
 				totalTests = t
 			}
-			if p, err := strconv.Atoi(matches[2]); err == nil {
-				passedTests = p
+			if pVal, err := strconv.Atoi(matches[2]); err == nil {
+				passedTests = pVal
 			}
 			if f, err := strconv.Atoi(matches[3]); err == nil {
 				failedTestsCount = f
 			}
+			currentTest = ""
+			captureActive = false
+			summaryDetected = true
 		}
 	}
 
 	// Build results for each expected test ID
 	for _, testID := range testIDs {
-		passed := !failedTests[testID]
+		normID := normalizeTestIdentifier(testID)
+		passed := !failedTests[normID]
 		result := TestResult{
 			TestID:   testID,
 			TestName: testID,
 			Passed:   passed,
 		}
 
-		// If failed, try to extract error message from nearby lines
 		if !passed {
-			result.ErrorMessage = p.extractErrorMessage(lines, testID)
+			if messages := failureMessages[normID]; len(messages) > 0 {
+				result.ErrorMessage = strings.Join(messages, "\n")
+			} else {
+				result.ErrorMessage = p.extractErrorMessage(lines, testID)
+			}
 		}
 
 		testResults = append(testResults, result)
 	}
 
-	// Validation: check if parsed numbers match expectations
+	// Validation y normalización de conteos
 	actualPassed := 0
 	actualFailed := 0
 	for _, result := range testResults {
@@ -103,43 +141,74 @@ func (p *DoctestParser) Parse(output string, testIDs []string) ([]TestResult, er
 		}
 	}
 
-	if totalTests != len(testIDs) {
-		return testResults, fmt.Errorf("test count mismatch: doctest reported %d tests, expected %d", totalTests, len(testIDs))
-	}
-
-	if passedTests != actualPassed || failedTestsCount != actualFailed {
-		return testResults, fmt.Errorf("result mismatch: doctest reported %d passed/%d failed, but parsing found %d passed/%d failed",
-			passedTests, failedTestsCount, actualPassed, actualFailed)
+	if !summaryDetected {
+		totalTests = len(testIDs)
+		passedTests = actualPassed
+		failedTestsCount = actualFailed
+	} else {
+		if totalTests != len(testIDs) {
+			return testResults, fmt.Errorf("test count mismatch: doctest reported %d tests, expected %d", totalTests, len(testIDs))
+		}
+		if passedTests != actualPassed || failedTestsCount != actualFailed {
+			return testResults, fmt.Errorf(
+				"result mismatch: doctest reported %d passed/%d failed, but parsing found %d passed/%d failed",
+				passedTests, failedTestsCount, actualPassed, actualFailed,
+			)
+		}
 	}
 
 	return testResults, nil
 }
 
+func normalizeTestIdentifier(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
 // extractErrorMessage intenta extraer el mensaje de error para un test fallido
 func (p *DoctestParser) extractErrorMessage(lines []string, testID string) string {
-	testCasePattern := regexp.MustCompile(`\[doctest\]\s+TEST CASE:\s+` + regexp.QuoteMeta(testID))
+	testCasePattern := regexp.MustCompile(`(?i)(?:\[doctest\]\s+)?TEST CASE:\s+` + regexp.QuoteMeta(testID))
 	checkPattern := regexp.MustCompile(`CHECK\(.+\)\s+is NOT correct!`)
 
 	inTestCase := false
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	collecting := false
+	var messages []string
 
-		// Start of our test case
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+
 		if testCasePattern.MatchString(line) {
 			inTestCase = true
+			collecting = false
+			messages = messages[:0]
 			continue
 		}
 
-		// End of test case (next test case or summary)
-		if inTestCase && (strings.Contains(line, "[doctest] TEST CASE:") ||
-			strings.Contains(line, "[doctest] test cases:")) {
+		if !inTestCase {
+			continue
+		}
+
+		if strings.Contains(line, "[doctest] TEST CASE:") ||
+			strings.HasPrefix(line, "TEST CASE:") ||
+			strings.Contains(line, "[doctest] test cases:") {
 			break
 		}
 
-		// Extract CHECK failure message
-		if inTestCase && checkPattern.MatchString(line) {
-			return strings.TrimSpace(line)
+		if collecting {
+			if line == "" || strings.HasPrefix(line, "[doctest]") || strings.HasPrefix(line, "===============================================================================") {
+				break
+			}
+			messages = append(messages, line)
+			continue
 		}
+
+		if checkPattern.MatchString(line) {
+			messages = append(messages, line)
+			collecting = true
+		}
+	}
+
+	if len(messages) > 0 {
+		return strings.Join(messages, "\n")
 	}
 
 	return "Test failed - check output for details"
