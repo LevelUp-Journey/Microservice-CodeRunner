@@ -78,7 +78,34 @@ func (e *DockerExecutor) Execute(ctx context.Context, config *ExecutionConfig) (
 
 	// Only parse test results if compilation succeeded
 	if exitCode == 0 {
-		e.parseTestResults(result, config.TestIDs)
+		testResults, err := e.parser.Parse(result.StdOut, config.TestIDs)
+		if err != nil {
+			log.Printf("  ⚠️  Warning: Error parsing test results: %v", err)
+			// Fallback: mark all as failed
+			result.TotalTests = len(config.TestIDs)
+			result.PassedTests = 0
+			result.FailedTests = len(config.TestIDs)
+			for _, testID := range config.TestIDs {
+				result.TestResults = append(result.TestResults, TestResult{
+					TestID:       testID,
+					TestName:     testID,
+					Passed:       false,
+					ErrorMessage: "Parsing failed",
+				})
+			}
+		} else {
+			result.TestResults = testResults
+			result.TotalTests = len(testResults)
+			result.PassedTests = 0
+			result.FailedTests = 0
+			for _, tr := range testResults {
+				if tr.Passed {
+					result.PassedTests++
+				} else {
+					result.FailedTests++
+				}
+			}
+		}
 	} else {
 		// Compilation or runtime error - detect error type
 		e.detectErrorType(result)

@@ -19,6 +19,7 @@ type Executor interface {
 type DockerExecutor struct {
 	client       *client.Client
 	dockerConfig *DockerConfig
+	parser       TestResultParser
 }
 
 // NewDockerExecutor crea una nueva instancia de DockerExecutor
@@ -31,6 +32,7 @@ func NewDockerExecutor() (*DockerExecutor, error) {
 	return &DockerExecutor{
 		client:       cli,
 		dockerConfig: DefaultDockerConfig(),
+		parser:       NewDoctestParser(),
 	}, nil
 }
 
