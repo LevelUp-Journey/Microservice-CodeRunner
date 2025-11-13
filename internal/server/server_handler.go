@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	pb "code-runner/api/gen/proto"
+	pb "code-runner/api/gen"
 	"code-runner/internal/database/models"
 	"code-runner/internal/docker"
 	"code-runner/internal/types"
@@ -128,13 +128,16 @@ func (s *solutionEvaluationServiceImpl) parseAndValidateRequest(req *pb.Executio
 		return nil, err
 	}
 
+	// Use default language (C++) for now
+	language := "cpp"
+
 	internalReq := &types.ExecutionRequest{
 		SolutionID:    challengeID,
 		ChallengeID:   challengeID,
 		CodeVersionID: codeVersionID,
 		StudentID:     studentID,
 		Code:          req.Code,
-		Language:      "cpp",
+		Language:      language,
 		TestCases:     convertTestCases(req.Tests),
 	}
 
@@ -229,4 +232,10 @@ func (s *solutionEvaluationServiceImpl) buildResponse(req *pb.ExecutionRequest, 
 		ErrorMessage:    errorMessage,
 		ErrorType:       errorType,
 	}, nil
+}
+
+// mapProtoLanguage mapea el lenguaje del proto a internal language
+func mapProtoLanguage(protoLang string) string {
+	// For now, default to C++ since language field is not properly implemented
+	return "cpp"
 }

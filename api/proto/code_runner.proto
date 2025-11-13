@@ -20,6 +20,7 @@ message ExecutionRequest {
     string student_id = 3;
     string code = 4;
     repeated TestCase tests = 5;
+    string language = 6;
 }
 
 // Test case definition
