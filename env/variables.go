@@ -31,7 +31,7 @@ func LoadConfig() (*Config, error) {
 			User:            getEnv("DB_USER", "postgres"),
 			Password:        getEnv("DB_PASSWORD", "postgres"),
 			Name:            getEnv("DB_NAME", "code_runner_db"),
-			SSLMode:         getEnv("DB_SSLMODE", "require"),
+			SSLMode:         getEnv("DB_SSLMODE", "disable"),
 			Timezone:        getEnv("DB_TIMEZONE", "UTC"),
 			MaxOpenConns:    25,
 			MaxIdleConns:    10,
