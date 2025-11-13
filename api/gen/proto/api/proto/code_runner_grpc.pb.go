@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.33.0
-// source: code_runner.proto
+// source: api/proto/code_runner.proto
 
 package proto
 
@@ -124,5 +124,5 @@ var SolutionEvaluationService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "code_runner.proto",
+	Metadata: "api/proto/code_runner.proto",
 }
