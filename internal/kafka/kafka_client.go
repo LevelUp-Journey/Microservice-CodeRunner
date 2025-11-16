@@ -48,6 +48,14 @@ func NewKafkaClient(config *env.KafkaConfig) (*KafkaClient, error) {
 	log.Printf("📡 Bootstrap servers: %s", config.BootstrapServers)
 	log.Printf("🔧 Ready for dynamic topic operations")
 
+	// Create default topic if configured
+	if config.Topic != "" {
+		if err := client.EnsureTopicExists(config.Topic); err != nil {
+			log.Printf("⚠️  Warning: Failed to ensure topic exists: %v", err)
+			// No devolvemos error para que el servidor pueda continuar
+		}
+	}
+
 	return client, nil
 }
 
@@ -320,4 +328,139 @@ func parseConnectionString(connStr string) (username, password string, err error
 	password = connStr
 
 	return username, password, nil
+}
+
+// EnsureTopicExists verifica si un topic existe y lo crea si no existe
+func (kc *KafkaClient) EnsureTopicExists(topic string) error {
+	if topic == "" {
+		return fmt.Errorf("topic name cannot be empty")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Conectar al broker para verificar y crear topic
+	conn, err := kc.dialer.DialContext(ctx, "tcp", kc.config.BootstrapServers)
+	if err != nil {
+		return fmt.Errorf("failed to dial Kafka broker: %w", err)
+	}
+	defer conn.Close()
+
+	// Obtener particiones del topic (esto falla si no existe)
+	partitions, err := conn.ReadPartitions(topic)
+	if err != nil {
+		// El topic no existe, intentar crearlo
+		log.Printf("📝 Topic '%s' does not exist, attempting to create it...", topic)
+
+		controller, err := conn.Controller()
+		if err != nil {
+			return fmt.Errorf("failed to get controller: %w", err)
+		}
+
+		controllerConn, err := kc.dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", controller.Host, controller.Port))
+		if err != nil {
+			return fmt.Errorf("failed to connect to controller: %w", err)
+		}
+		defer controllerConn.Close()
+
+		// Configuración del topic
+		topicConfig := kafka.TopicConfig{
+			Topic:             topic,
+			NumPartitions:     3,  // 3 particiones para mejor distribución
+			ReplicationFactor: 1,  // 1 réplica (ajustar según el cluster)
+		}
+
+		err = controllerConn.CreateTopics(topicConfig)
+		if err != nil {
+			// Verificar si el error es porque el topic ya existe
+			if strings.Contains(err.Error(), "already exists") {
+				log.Printf("✅ Topic '%s' already exists", topic)
+				return nil
+			}
+			return fmt.Errorf("failed to create topic: %w", err)
+		}
+
+		log.Printf("✅ Topic '%s' created successfully with %d partitions", topic, topicConfig.NumPartitions)
+		return nil
+	}
+
+	// El topic ya existe
+	log.Printf("✅ Topic '%s' exists with %d partitions", topic, len(partitions))
+	return nil
+}
+
+// CreateTopic crea un topic de Kafka con configuración personalizada
+func (kc *KafkaClient) CreateTopic(topic string, numPartitions int, replicationFactor int) error {
+	if topic == "" {
+		return fmt.Errorf("topic name cannot be empty")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conn, err := kc.dialer.DialContext(ctx, "tcp", kc.config.BootstrapServers)
+	if err != nil {
+		return fmt.Errorf("failed to dial Kafka broker: %w", err)
+	}
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	if err != nil {
+		return fmt.Errorf("failed to get controller: %w", err)
+	}
+
+	controllerConn, err := kc.dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", controller.Host, controller.Port))
+	if err != nil {
+		return fmt.Errorf("failed to connect to controller: %w", err)
+	}
+	defer controllerConn.Close()
+
+	topicConfig := kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     numPartitions,
+		ReplicationFactor: replicationFactor,
+	}
+
+	err = controllerConn.CreateTopics(topicConfig)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			log.Printf("ℹ️  Topic '%s' already exists", topic)
+			return nil
+		}
+		return fmt.Errorf("failed to create topic: %w", err)
+	}
+
+	log.Printf("✅ Topic '%s' created with %d partitions and replication factor %d",
+		topic, numPartitions, replicationFactor)
+	return nil
+}
+
+// ListTopics lista todos los topics disponibles en Kafka
+func (kc *KafkaClient) ListTopics() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := kc.dialer.DialContext(ctx, "tcp", kc.config.BootstrapServers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial Kafka broker: %w", err)
+	}
+	defer conn.Close()
+
+	partitions, err := conn.ReadPartitions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read partitions: %w", err)
+	}
+
+	// Extraer nombres únicos de topics
+	topicSet := make(map[string]bool)
+	for _, partition := range partitions {
+		topicSet[partition.Topic] = true
+	}
+
+	topics := make([]string, 0, len(topicSet))
+	for topic := range topicSet {
+		topics = append(topics, topic)
+	}
+
+	return topics, nil
 }
