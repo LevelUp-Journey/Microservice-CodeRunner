@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"code-runner/internal/database/models"
 	"code-runner/internal/docker"
+	"code-runner/internal/kafka"
 	"code-runner/internal/types"
 )
 
@@ -140,4 +142,79 @@ func (s *solutionEvaluationServiceImpl) extractTestIDs(dockerResult *docker.Exec
 	}
 
 	return approvedIDs, failedIDs
+}
+
+// publishMetricsToKafka publica las métricas de ejecución a Kafka
+func (s *solutionEvaluationServiceImpl) publishMetricsToKafka(ctx context.Context, execution *models.Execution, dockerResult *docker.ExecutionResult, executionTimeMS int64) {
+	// Si no hay cliente de Kafka, no hacer nada
+	if s.kafkaClient == nil {
+		log.Printf("⚠️  Kafka client not available, skipping metrics publishing")
+		return
+	}
+
+	// Construir el evento de métricas
+	event := &kafka.ExecutionMetricsEvent{
+		ExecutionID:   execution.ID.String(),
+		ChallengeID:   execution.ChallengeID,
+		CodeVersionID: execution.SolutionID, // SolutionID is used as CodeVersionID
+		StudentID:     execution.StudentID,
+		Language:      execution.Language,
+		Status:        string(execution.Status),
+		Timestamp:     time.Now(),
+
+		// Métricas de rendimiento
+		ExecutionTimeMS: executionTimeMS,
+		TotalTests:      execution.TotalTests,
+		PassedTests:     execution.PassedTests,
+		FailedTests:     execution.TotalTests - execution.PassedTests,
+		Success:         execution.Success,
+
+		// Errores
+		ErrorMessage: execution.ErrorMessage,
+		ErrorType:    execution.ErrorType,
+
+		// Metadata del servidor
+		ServerInstance: getServerInstance(),
+	}
+
+	// Agregar métricas de Docker si están disponibles
+	if dockerResult != nil {
+		event.MemoryUsageMB = dockerResult.MemoryUsageMB
+		event.ExitCode = dockerResult.ExitCode
+
+		// Agregar resultados de tests individuales
+		if len(dockerResult.TestResults) > 0 {
+			event.TestResults = make([]kafka.TestResultMetric, 0, len(dockerResult.TestResults))
+			for _, testResult := range dockerResult.TestResults {
+				event.TestResults = append(event.TestResults, kafka.TestResultMetric{
+					TestID:          testResult.TestID,
+					TestName:        testResult.TestName,
+					Passed:          testResult.Passed,
+					ExecutionTimeMS: testResult.ExecutionTimeMS,
+					ErrorMessage:    testResult.ErrorMessage,
+				})
+			}
+		}
+	}
+
+	// Publicar a Kafka de forma asíncrona
+	go func() {
+		publishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := s.kafkaClient.PublishExecutionMetrics(publishCtx, event); err != nil {
+			log.Printf("⚠️  Failed to publish metrics to Kafka: %v", err)
+		} else {
+			log.Printf("✅ Metrics published to Kafka for execution %s", execution.ID)
+		}
+	}()
+}
+
+// getServerInstance obtiene el identificador de instancia del servidor
+func getServerInstance() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
 }

@@ -112,7 +112,7 @@ func main() {
 		log.Printf("🔍 Service Discovery: %s", config.ServiceDiscovery.URL)
 	}
 
-	if err := server.StartServer(grpcPort, database.GetDB()); err != nil {
+	if err := server.StartServer(grpcPort, database.GetDB(), kafkaClient); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 

@@ -14,6 +14,7 @@ import (
 	pb "code-runner/api/gen/proto"
 	"code-runner/internal/database/repository"
 	"code-runner/internal/docker"
+	"code-runner/internal/kafka"
 	template "code-runner/internal/template/cpp"
 )
 
@@ -24,10 +25,11 @@ type solutionEvaluationServiceImpl struct {
 	generatedTestCodeRepo *repository.GeneratedTestCodeRepository
 	templateGenerator     *template.CppTemplateGenerator
 	dockerExecutor        *docker.DockerExecutor
+	kafkaClient           *kafka.KafkaClient
 }
 
 // NewSolutionEvaluationServiceServer crea una nueva instancia del servicio
-func NewSolutionEvaluationServiceServer(db *gorm.DB) pb.SolutionEvaluationServiceServer {
+func NewSolutionEvaluationServiceServer(db *gorm.DB, kafkaClient *kafka.KafkaClient) pb.SolutionEvaluationServiceServer {
 	executionRepo := repository.NewExecutionRepository(db)
 	generatedTestCodeRepo := repository.NewGeneratedTestCodeRepository(db)
 	templateGenerator := template.NewCppTemplateGenerator(generatedTestCodeRepo)
@@ -44,11 +46,12 @@ func NewSolutionEvaluationServiceServer(db *gorm.DB) pb.SolutionEvaluationServic
 		generatedTestCodeRepo: generatedTestCodeRepo,
 		templateGenerator:     templateGenerator,
 		dockerExecutor:        dockerExecutor,
+		kafkaClient:           kafkaClient,
 	}
 }
 
 // StartServer inicia el servidor gRPC
-func StartServer(port string, db *gorm.DB) error {
+func StartServer(port string, db *gorm.DB, kafkaClient *kafka.KafkaClient) error {
 	// Create listener
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
@@ -69,7 +72,7 @@ func StartServer(port string, db *gorm.DB) error {
 	log.Printf("✅ gRPC server created")
 
 	// Register service
-	service := NewSolutionEvaluationServiceServer(db)
+	service := NewSolutionEvaluationServiceServer(db, kafkaClient)
 	pb.RegisterSolutionEvaluationServiceServer(grpcServer, service)
 	log.Printf("✅ Service registered")
 
