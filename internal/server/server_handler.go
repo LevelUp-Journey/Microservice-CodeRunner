@@ -65,6 +65,12 @@ func (s *solutionEvaluationServiceImpl) EvaluateSolution(ctx context.Context, re
 		return nil, fmt.Errorf("failed to update execution record: %w", err)
 	}
 
+	// Calculate total execution time
+	executionTime := time.Since(startTime)
+
+	// Publish metrics to Kafka
+	s.publishMetricsToKafka(ctx, execution, dockerResult, executionTime.Milliseconds())
+
 	// Build response
 	return s.buildResponse(req, execution, dockerResult, startTime)
 }
