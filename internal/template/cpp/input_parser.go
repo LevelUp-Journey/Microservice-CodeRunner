@@ -145,19 +145,21 @@ func (p *InputParser) formatSimpleParameter(param string) string {
 		return ""
 	}
 
-	// If numeric, return as is
 	if p.isNumeric(param) {
 		return param
 	}
 
-	// If boolean
 	if param == "true" || param == "false" {
 		return param
 	}
 
-	// Otherwise, quote as string
+	if p.isQuotedString(param) {
+		return param
+	}
+
 	return fmt.Sprintf("\"%s\"", param)
 }
+
 
 // isNumeric checks if a string represents a number
 func (p *InputParser) isNumeric(s string) bool {
@@ -179,4 +181,19 @@ func (p *InputParser) isNumeric(s string) bool {
 		return false
 	}
 	return true
+}
+
+func (p *InputParser) isQuotedString(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+
+	first := s[0]
+	last := s[len(s)-1]
+
+	if first != last {
+		return false
+	}
+
+	return first == '"' || first == '\''
 }

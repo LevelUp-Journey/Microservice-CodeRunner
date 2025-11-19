@@ -68,6 +68,7 @@ func (g *TestGenerator) GenerateTestCode(tests []*types.TestCase, functionName s
 	return strings.Join(testLines, "\n"), testCount
 }
 
+
 // formatExpectedOutput formats the expected output for C++
 func (g *TestGenerator) formatExpectedOutput(output string) string {
 	output = strings.TrimSpace(output)
@@ -75,19 +76,22 @@ func (g *TestGenerator) formatExpectedOutput(output string) string {
 		return ""
 	}
 
-	// If numeric, return as is
 	if g.isNumeric(output) {
 		return output
 	}
 
-	// If boolean, convert to C++ bool
 	if output == "true" || output == "false" {
 		return output
 	}
 
-	// Otherwise, quote as string
+	if g.isQuotedString(output) {
+		return output
+	}
+
 	return fmt.Sprintf("\"%s\"", output)
 }
+
+
 
 // isNumeric checks if a string represents a number
 func (g *TestGenerator) isNumeric(s string) bool {
@@ -109,4 +113,19 @@ func (g *TestGenerator) isNumeric(s string) bool {
 		return false
 	}
 	return true
+}
+
+func (g *TestGenerator) isQuotedString(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+
+	first := s[0]
+	last := s[len(s)-1]
+
+	if first != last {
+		return false
+	}
+
+	return first == '"' || first == '\''
 }

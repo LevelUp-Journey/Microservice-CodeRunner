@@ -136,6 +136,9 @@ func (g *CppTemplateGenerator) formatInput(input string) string {
 	if g.isNumeric(input) {
 		return input
 	}
+	if g.isQuotedString(input) {
+		return input
+	}
 	return fmt.Sprintf("\"%s\"", input)
 }
 
@@ -143,6 +146,9 @@ func (g *CppTemplateGenerator) formatInput(input string) string {
 func (g *CppTemplateGenerator) formatExpectedOutput(output string) string {
 	output = strings.TrimSpace(output)
 	if g.isNumeric(output) {
+		return output
+	}
+	if g.isQuotedString(output) {
 		return output
 	}
 	return fmt.Sprintf("\"%s\"", output)
@@ -166,6 +172,18 @@ func (g *CppTemplateGenerator) isNumeric(s string) bool {
 		return false
 	}
 	return true
+}
+
+func (g *CppTemplateGenerator) isQuotedString(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	first := s[0]
+	last := s[len(s)-1]
+	if (first == '"' || first == '\'') && first == last {
+		return true
+	}
+	return false
 }
 
 // hasCustomValidation verifica si algún test tiene validación personalizada
